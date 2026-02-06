@@ -1,0 +1,27 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    /* 🔹 ADDITIONS (REQUIRED FOR ALIASES) */
+    "baseUrl": "./src",
+    "paths": {
+      "@auth/*": ["auth/*"],
+      "@seats/*": ["seats/*"],
+      "@components/*": ["components/*"],
+      "@api/*": ["api/*"],
+      "@utils/*": ["utils/*"]
+    },
+
+    /* 🔹 EXISTING OPTIONS (UNCHANGED) */
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "types": ["vite/client", "react", "react-dom"],
+
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  }
+}
