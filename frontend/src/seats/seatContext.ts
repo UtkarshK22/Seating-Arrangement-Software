@@ -11,8 +11,9 @@ type Seat = {
 type ContextInput = {
   seat: Seat;
   currentUserId: string;
-  role: Role | undefined;
+  role: Role;
 };
+
 
 export function getSeatContext({
   seat,

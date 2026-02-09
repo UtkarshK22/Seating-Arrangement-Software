@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getSeatUtilization } from "../api/analytics";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../auth/useAuth";
 import { downloadSeatAuditCSV } from "../api/exports";
 import { getSeatAuditDownloadUrl } from "../api/exports";
 

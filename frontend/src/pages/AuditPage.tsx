@@ -1,14 +1,17 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+
 import {
   getFloorAudit,
   exportFloorAuditCsv,
 } from "../api/seatAudit";
 import type { SeatAuditLog } from "../api/seatAudit";
-import { useAuth } from "../hooks/useAuth";
-import { canViewSeatAudit } from "../utils/permissions";
+
 import { getLastExport, getExportHistory } from "../api/exports";
 import type { ExportHistoryItem } from "../api/exports";
+
+import { useAuth } from "../auth/useAuth";
+import { can } from "../auth/can";
 
 /* ========================
    Minimal HTTP error shape
@@ -24,8 +27,8 @@ type HttpError = {
 
 export default function AuditPage() {
   const { floorId } = useParams<{ floorId: string }>();
-  const { user } = useAuth();
-  
+  const { user, isLoading } = useAuth();
+
   const [logs, setLogs] = useState<SeatAuditLog[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -41,8 +44,10 @@ export default function AuditPage() {
      Fetch audit logs
   ======================== */
   useEffect(() => {
+    if (isLoading) return;
     if (!floorId) return;
-    if (!user || !canViewSeatAudit(user.role)) return;
+    if (!user) return;
+    if (!can(user.role, "VIEW_AUDIT_LOGS")) return;
 
     let cancelled = false;
 
@@ -59,35 +64,46 @@ export default function AuditPage() {
     return () => {
       cancelled = true;
     };
-  }, [floorId, page, from, to, user]);
+  }, [floorId, page, from, to, user, isLoading]);
 
   /* ========================
-     Fetch last export timestamp
+     Fetch last export
   ======================== */
   useEffect(() => {
-    if (!user || !canViewSeatAudit(user.role)) return;
+    if (isLoading) return;
+    if (!user) return;
+    if (!can(user.role, "VIEW_AUDIT_LOGS")) return;
 
     getLastExport()
       .then((data) => setLastExport(data ? data.exportedAt : null))
       .catch(() => setLastExport(null));
-  }, [user]);
+  }, [user, isLoading]);
 
   /* ========================
      Fetch export history
   ======================== */
   useEffect(() => {
-    if (!user || !canViewSeatAudit(user.role)) return;
+    if (isLoading) return;
+    if (!user) return;
+    if (!can(user.role, "VIEW_AUDIT_LOGS")) return;
 
     getExportHistory()
       .then((res) => setExportHistory(res.data))
       .catch(() => setExportHistory([]));
-  }, [user]);
+  }, [user, isLoading]);
+
+  /* ========================
+     Guards
+  ======================== */
+  if (isLoading) {
+    return <div style={{ padding: 24 }}>Loading…</div>;
+  }
 
   if (!floorId) {
     return <div style={{ padding: 24 }}>Invalid floor</div>;
   }
 
-  if (!user || !canViewSeatAudit(user.role)) {
+  if (!user || !can(user.role, "VIEW_AUDIT_LOGS")) {
     return (
       <div style={{ padding: 24 }}>
         Seat audit history is available to administrators only.
@@ -99,6 +115,9 @@ export default function AuditPage() {
     return <div style={{ padding: 24 }}>Loading audit…</div>;
   }
 
+  /* ========================
+     UI
+  ======================== */
   return (
     <div style={{ padding: 24 }}>
       <h2>Floor Audit</h2>
@@ -127,15 +146,12 @@ export default function AuditPage() {
             const history = await getExportHistory();
             setExportHistory(history.data);
           } catch (e: unknown) {
-            if (typeof e === "object" && e !== null) {
-              const err = e as HttpError;
-
-              if (err.response?.status === 409) {
-                setCooldownMessage(
-                  err.response.data?.message ??
-                    "Export cooldown active. Please try again later."
-                );
-              }
+            const err = e as HttpError;
+            if (err.response?.status === 409) {
+              setCooldownMessage(
+                err.response.data?.message ??
+                  "Export cooldown active. Please try again later."
+              );
             }
           }
         }}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/http";
 
-
 type User = {
   id: string;
   fullName: string;
@@ -24,14 +23,24 @@ export default function ReassignSeatModal({
   const [selectedUserId, setSelectedUserId] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* ===================== LOAD USERS ===================== */
+
   useEffect(() => {
     api<User[]>("/users")
       .then(setUsers)
       .catch(() => setUsers([]));
   }, []);
 
+  /* ===================== ACTION ===================== */
+
   const handleReassign = async () => {
     if (!selectedUserId) return;
+
+    const confirmed = window.confirm(
+      "This will reassign the seat to another user. Continue?"
+    );
+
+    if (!confirmed) return;
 
     setLoading(true);
     try {
@@ -49,6 +58,8 @@ export default function ReassignSeatModal({
     }
   };
 
+  /* ===================== UI ===================== */
+
   return (
     <div style={overlay}>
       <div style={modal}>
@@ -57,6 +68,7 @@ export default function ReassignSeatModal({
         <select
           value={selectedUserId}
           onChange={(e) => setSelectedUserId(e.target.value)}
+          disabled={loading}
         >
           <option value="">Select user</option>
           {users.map((u) => (
@@ -67,10 +79,17 @@ export default function ReassignSeatModal({
         </select>
 
         <div style={{ marginTop: 16 }}>
-          <button onClick={handleReassign} disabled={loading}>
+          <button
+            onClick={handleReassign}
+            disabled={loading || !selectedUserId}
+          >
             Reassign
           </button>
-          <button onClick={onClose} style={{ marginLeft: 8 }}>
+          <button
+            onClick={onClose}
+            style={{ marginLeft: 8 }}
+            disabled={loading}
+          >
             Cancel
           </button>
         </div>
@@ -78,6 +97,8 @@ export default function ReassignSeatModal({
     </div>
   );
 }
+
+/* ===================== STYLES ===================== */
 
 const overlay = {
   position: "fixed" as const,

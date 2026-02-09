@@ -10,7 +10,14 @@ type Props = {
 };
 
 export function RequirePermission({ permission, children }: Props) {
-  const { role } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return null;
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const { role } = user;
 
   if (!can(role, permission)) {
     return <Navigate to="/unauthorized" replace />;

@@ -2,18 +2,15 @@ import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 
 import { getUsers } from "../api/users";
-import {
-  unassignSeat,
-  reassignSeat,
-} from "../api/seatAssignments";
+import { unassignSeat, reassignSeat } from "../api/seatAssignments";
 import { toggleSeatLock } from "../api/seats";
 import { SeatAuditTable } from "./SeatAuditTable";
 
-/* 🔹 STEP 2 IMPORTS */
+/* AUTH & RBAC */
 import { useAuth } from "@auth/useAuth";
 import { getSeatContext } from "@seats/seatContext";
 
-/* 🔹 STEP 3 IMPORT */
+/* OPTIMISTIC UPDATES */
 import { runOptimistic } from "@utils/optimistic";
 
 /* ===================== TYPES ===================== */
@@ -62,7 +59,7 @@ export function SeatDetailsPanel({
   onOptimisticUpdate,
   onOptimisticLockUpdate,
 }: Props) {
-  const { role, userId } = useAuth();
+  const { user, isLoading } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -71,13 +68,20 @@ export function SeatDetailsPanel({
   /* ===================== LOAD USERS ===================== */
 
   useEffect(() => {
+    if (isLoading) return;
+    if (!user) return;
     if (!seat) return;
 
     setSelectedUserId(null);
     getUsers()
       .then(setUsers)
       .catch(() => toast.error("Failed to load users"));
-  }, [seat]);
+  }, [seat, user, isLoading]);
+
+   /* ===================== AUTH GUARD ===================== */
+
+  if (isLoading) return null;
+  if (!user) return null;
 
   /* ===================== SEAT CONTEXT ===================== */
 
@@ -89,8 +93,8 @@ export function SeatDetailsPanel({
           isOccupied: seat.isOccupied,
           assignedUserId: seat.assignedUser?.id ?? null,
         },
-        currentUserId: userId!,
-        role,
+        currentUserId: user.id,
+        role: user.role,
       })
     : null;
 
@@ -103,15 +107,15 @@ export function SeatDetailsPanel({
     }
 
     const prevUser = seat.assignedUser;
-    const user = users.find(u => u.id === selectedUserId);
-    const nextUser = user
-    ? {
-      id: user.id,
-      fullName: user.fullName,
-      email: seat.assignedUser?.email ?? "",
-    }
-  : null;
+    const selected = users.find(u => u.id === selectedUserId);
 
+    const nextUser = selected
+      ? {
+          id: selected.id,
+          fullName: selected.fullName,
+          email: prevUser?.email ?? "",
+        }
+      : null;
 
     setLoading(true);
 
@@ -131,7 +135,7 @@ export function SeatDetailsPanel({
       onClose();
     } catch (err: unknown) {
       const error = err as { status?: number };
-      
+
       if (error?.status === 403 && seat.isLocked && !override) {
         if (window.confirm("Seat is locked. Override?")) {
           handleAssign(true);
@@ -172,7 +176,7 @@ export function SeatDetailsPanel({
   async function handleMoveSeat(override = false) {
     if (!seat || !moveFromSeat?.assignedUser) return;
 
-    const user = moveFromSeat.assignedUser;
+    const movingUser = moveFromSeat.assignedUser;
 
     setLoading(true);
 
@@ -180,14 +184,14 @@ export function SeatDetailsPanel({
       await runOptimistic({
         optimistic: () => {
           onOptimisticUpdate(moveFromSeat.id, null);
-          onOptimisticUpdate(seat.id, user);
+          onOptimisticUpdate(seat.id, movingUser);
         },
         rollback: () => {
-          onOptimisticUpdate(moveFromSeat.id, user);
+          onOptimisticUpdate(moveFromSeat.id, movingUser);
           onOptimisticUpdate(seat.id, seat.assignedUser);
         },
         request: () =>
-          reassignSeat(user.id, seat.id, override),
+          reassignSeat(movingUser.id, seat.id, override),
         successMessage: "Seat reassigned",
         errorMessage: "Reassignment failed",
       });

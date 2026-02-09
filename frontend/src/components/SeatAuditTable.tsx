@@ -1,21 +1,24 @@
 import { useEffect, useState } from "react";
 import { getSeatAudit } from "../api/seatAudit";
 import type { SeatAuditLog } from "../api/seatAudit";
-import { useAuth } from "../hooks/useAuth";
-import { canViewSeatAudit } from "../utils/permissions";
+
+import { useAuth } from "../auth/useAuth";
+import { can } from "../auth/can";
 
 type Props = {
   seatId: string;
 };
 
 export function SeatAuditTable({ seatId }: Props) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
 
   const [logs, setLogs] = useState<SeatAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !canViewSeatAudit(user.role)) return;
+    if (isLoading) return;
+    if (!user) return;
+    if (!can(user.role, "VIEW_AUDIT_LOGS")) return;
 
     let mounted = true;
 
@@ -30,11 +33,11 @@ export function SeatAuditTable({ seatId }: Props) {
     return () => {
       mounted = false;
     };
-  }, [seatId, user]);
+  }, [seatId, user, isLoading]);
 
-  if (!user || !canViewSeatAudit(user.role)) {
-    return null;
-  }
+  if (isLoading) return null;
+  if (!user) return null;
+  if (!can(user.role, "VIEW_AUDIT_LOGS")) return null;
 
   if (loading) return <p>Loading audit…</p>;
   if (!logs.length) return <p>No history found</p>;
