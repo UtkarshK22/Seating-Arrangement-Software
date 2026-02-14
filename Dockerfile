@@ -18,5 +18,8 @@ RUN npx prisma generate
 # Build NestJS
 RUN npm run build
 
-# Start app
+# Ensure we stay inside backend folder
+WORKDIR /app/backend
+
+# Start the app
 CMD ["node", "dist/main.js"]
