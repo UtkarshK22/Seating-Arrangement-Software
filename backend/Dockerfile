@@ -19,8 +19,5 @@ RUN npx prisma generate
 # Build NestJS
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
-
 # Start app
 CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"]
