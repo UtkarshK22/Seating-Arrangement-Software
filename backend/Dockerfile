@@ -1,16 +1,12 @@
-# Use official Node image
 FROM node:18-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
 # Install dependencies
+COPY package*.json ./
 RUN npm install
 
-# Copy rest of the code
+# Copy source code
 COPY . .
 
 # Generate Prisma client
@@ -19,5 +15,5 @@ RUN npx prisma generate
 # Build NestJS
 RUN npm run build
 
-# Start app
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"]
+# Start the app (ONLY start the app)
+CMD ["node", "dist/main.js"]
