@@ -2,20 +2,21 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy backend package files
+COPY backend/package*.json ./backend/
 
-# Install deps
+# Install backend dependencies
+WORKDIR /app/backend
 RUN npm install
 
-# Copy source
-COPY . .
+# Copy backend source
+COPY backend .
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build Nest
+# Build NestJS
 RUN npm run build
 
-# Start ONLY the app (Prisma already ran during build)
+# Start the app
 CMD ["node", "dist/main.js"]
