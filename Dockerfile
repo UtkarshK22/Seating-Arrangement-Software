@@ -18,5 +18,8 @@ RUN npx prisma generate
 # Build NestJS
 RUN npm run build
 
+# Make sure PORT is exposed
+ENV PORT=3000
+
 # Start the app
 CMD ["node", "dist/main.js"]
