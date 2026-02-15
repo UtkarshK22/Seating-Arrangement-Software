@@ -16,8 +16,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard } from "@nestjs/throttler";
+import { AppController } from './app.controller';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ThrottlerModule.forRoot([{name: 'default',ttl: 60,limit: 100,},]),
     ConfigModule.forRoot({ isGlobal: true }),
