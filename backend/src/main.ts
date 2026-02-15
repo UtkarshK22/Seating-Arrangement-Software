@@ -16,6 +16,10 @@ async function bootstrap() {
     allowedHeaders: ["Content-Type", "Authorization"],
   });
 
+  app.getHttpAdapter().get("/", (req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
+  
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
