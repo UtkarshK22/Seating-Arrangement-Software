@@ -6,9 +6,32 @@ import 'reflect-metadata';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // ✅ Environment-based allowed origins
+  const allowedOrigins = [
+    'http://localhost:5173', // Local Vite dev
+    process.env.FRONTEND_URL, // Production frontend (set in Railway)
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: ['http://localhost:5173', /\.vercel\.app$/],
+    origin: (origin, callback) => {
+      // Allow non-browser tools like Postman
+      if (!origin) return callback(null, true);
+
+      // Allow exact matches
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow Vercel preview deployments
+      if (/\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   app.useGlobalPipes(
@@ -20,7 +43,7 @@ async function bootstrap() {
 
   // ✅ ROOT ROUTE FOR RAILWAY HEALTHCHECK
   const server = app.getHttpAdapter().getInstance();
-  server.get('/', (req, res) => {
+  server.get('/', (_req, res) => {
     res.status(200).send('OK');
   });
 
