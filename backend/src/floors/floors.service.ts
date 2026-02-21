@@ -1,13 +1,35 @@
 import {
   Injectable,
   ForbiddenException,
-  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FloorsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // =========================
+  // GET ALL FLOORS (ORG SAFE)
+  // =========================
+  async getFloors(
+    organizationId: string,
+  ) {
+    return this.prisma.floor.findMany({
+      where: {
+        building: {
+          organizationId,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        buildingId: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  }
 
   // =========================
   // CREATE FLOOR (ORG SAFE)

@@ -21,6 +21,19 @@ export class FloorsController {
   ) {}
 
   // =========================
+  // GET ALL FLOORS (ORG SAFE)
+  // =========================
+  @Get()
+  @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
+  getFloors(
+    @Org() organizationId: string,
+  ) {
+    return this.floorsService.getFloors(
+      organizationId,
+    );
+  }
+
+  // =========================
   // CREATE FLOOR (OWNER / ADMIN)
   // =========================
   @Post()
@@ -45,7 +58,6 @@ export class FloorsController {
 
   // =========================
   // GET SEATS OF A FLOOR
-  // (Everyone in org can view)
   // =========================
   @Get(':floorId/seats')
   @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
@@ -61,7 +73,6 @@ export class FloorsController {
 
   // =========================
   // GET UI-READY FLOOR MAP
-  // (Everyone in org can view)
   // =========================
   @Get(':floorId/map')
   @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
