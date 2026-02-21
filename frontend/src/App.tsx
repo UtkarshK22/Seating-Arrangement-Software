@@ -6,6 +6,7 @@ import { useAuth } from "./auth/useAuth";
 import ReassignSeatModal from "./components/ReassignSeatModal";
 import { can } from "./auth/can";
 import { MySeatInfoCard } from "./components/MySeatInfoCard";
+import FloorMapCanvas from "./components/FloorMapCanvas";
 
 /* ===================== TYPES ===================== */
 
@@ -17,7 +18,7 @@ type Floor = {
   height: number;
 };
 
-type Seat = {
+type SeatType = {
   id: string;
   seatCode: string;
   x: number;
@@ -28,7 +29,7 @@ type Seat = {
 
 type FloorMapResponse = {
   floor: Floor;
-  seats: Seat[];
+  seats: SeatType[];
 };
 
 /* ===================== UI HELPERS ===================== */
@@ -55,8 +56,8 @@ function App() {
   const { floorId } = useParams<{ floorId: string }>();
 
   const [floor, setFloor] = useState<Floor | null>(null);
-  const [seats, setSeats] = useState<Seat[]>([]);
-  const [selectedSeat, setSelectedSeat] = useState<Seat | null>(null);
+  const [seats, setSeats] = useState<SeatType[]>([]);
+  const [selectedSeat, setSelectedSeat] = useState<SeatType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState(false);
   const [mySeatId, setMySeatId] = useState<string | null>(null);
@@ -64,7 +65,7 @@ function App() {
   const { user, isLoading } = useAuth();
 
   const [showReassignModal, setShowReassignModal] = useState(false);
-  const [reassignSeat, setReassignSeat] = useState<Seat | null>(null);
+  const [reassignSeat, setReassignSeat] = useState<SeatType | null>(null);
 
   /* ===================== LOAD FLOOR MAP ===================== */
 
@@ -121,27 +122,25 @@ function App() {
   };
 
   const handleUnassignSeat = async () => {
-  if (!selectedSeat || selectedSeat.id !== mySeatId) return;
+    if (!selectedSeat || selectedSeat.id !== mySeatId) return;
 
-  const confirmed = window.confirm(
-    "Are you sure you want to unassign this seat?"
-  );
+    const confirmed = window.confirm(
+      "Are you sure you want to unassign this seat?"
+    );
+    if (!confirmed) return;
 
-  if (!confirmed) return;
+    setLoadingAction(true);
+    setError(null);
 
-  setLoadingAction(true);
-  setError(null);
-
-  try {
-    await api("/seat-assignments/unassign", { method: "POST" });
-    await loadFloorMap();
-  } catch {
-    setError("Unassign failed");
-  } finally {
-    setLoadingAction(false);
-  }
-};
-
+    try {
+      await api("/seat-assignments/unassign", { method: "POST" });
+      await loadFloorMap();
+    } catch {
+      setError("Unassign failed");
+    } finally {
+      setLoadingAction(false);
+    }
+  };
 
   /* ===================== UI STATES ===================== */
 
@@ -150,14 +149,7 @@ function App() {
   if (error) return <div style={{ padding: 32, color: "red" }}>{error}</div>;
   if (!floor) return <div style={{ padding: 32 }}>Loading floor…</div>;
 
-  /* ===================== SAFE DERIVED STATE ===================== */
-
-  const safeFloor: Floor = floor;
-  const isEmployee =
-    user.role === "EMPLOYEE" || user.role === "MANAGER";
-  const hasNoSeat = isEmployee && !mySeatId;
-  const hasNoSeats = seats.length === 0;
-  const hasFloorImage = Boolean(safeFloor.imageUrl);
+  const safeFloor = floor;
   const { role } = user;
 
   /* ===================== UI ===================== */
@@ -175,23 +167,6 @@ function App() {
 
       <MySeatInfoCard />
 
-      {hasNoSeat && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 8,
-            background: "#020617",
-            border: "1px dashed #334155",
-            color: "#cbd5f5",
-            maxWidth: 520,
-          }}
-        >
-          You don’t have a seat assigned yet. Click an available seat on the map
-          to claim one.
-        </div>
-      )}
-
       <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
         <LegendDot color="#22c55e" label="Available" />
         <LegendDot color="#dc2626" label="Occupied" />
@@ -199,84 +174,17 @@ function App() {
         <LegendDot color="#6b7280" label="Locked" />
       </div>
 
-      {!hasFloorImage ? (
-        <div
-          style={{
-            marginTop: 24,
-            padding: 24,
-            border: "1px dashed #334155",
-            color: "#cbd5f5",
-            maxWidth: 600,
-          }}
-        >
-          Floor layout is not available. Please upload a floor plan.
-        </div>
-      ) : hasNoSeats ? (
-        <div
-          style={{
-            marginTop: 24,
-            padding: 24,
-            border: "1px dashed #334155",
-            color: "#cbd5f5",
-            maxWidth: 600,
-          }}
-        >
-          No seats have been configured on this floor yet.
-        </div>
-      ) : (
-        <div
-          style={{
-            position: "relative",
-            width: 900,
-            aspectRatio: `${safeFloor.width} / ${safeFloor.height}`,
-            backgroundImage: `url(${safeFloor.imageUrl})`,
-            backgroundSize: "contain",
-            backgroundRepeat: "no-repeat",
-            border: "1px solid #374151",
-          }}
-        >
-          {seats.map((seat) => {
-            const isMySeat = seat.id === mySeatId;
-            const disabled =
-              seat.isLocked || (seat.isOccupied && !isMySeat);
-
-            return (
-              <div
-                key={seat.id}
-                onClick={() => {
-                  if (disabled) return;
-                  setSelectedSeat(seat);
-                }}
-                style={{
-                  position: "absolute",
-                  left: `${seat.x * 100}%`,
-                  top: `${seat.y * 100}%`,
-                  transform: "translate(-50%, -50%)",
-                  cursor: disabled ? "not-allowed" : "pointer",
-                }}
-              >
-                <div
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: "50%",
-                    backgroundColor: isMySeat
-                      ? "#2563eb"
-                      : seat.isLocked
-                      ? "#6b7280"
-                      : seat.isOccupied
-                      ? "#dc2626"
-                      : "#22c55e",
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* 🔥 Refactored Canvas Component */}
+      <FloorMapCanvas
+        floor={safeFloor}
+        seats={seats}
+        selectedSeatId={selectedSeat?.id ?? null}
+        mySeatId={mySeatId}
+        onSeatSelect={setSelectedSeat}
+      />
 
       {selectedSeat && (
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 24, display: "flex", gap: 12 }}>
           {can(role, "SEAT_ASSIGN_SELF") && (
             <button
               onClick={handleAssignSeat}
@@ -285,8 +193,17 @@ function App() {
                 selectedSeat.isOccupied ||
                 selectedSeat.isLocked
               }
+              style={{
+                padding: "10px 18px",
+                borderRadius: 8,
+                border: "none",
+                fontWeight: 600,
+                background: "#6366f1",
+                color: "#fff",
+                cursor: "pointer",
+              }}
             >
-              Assign to Me
+              {loadingAction ? "Processing..." : "Assign to Me"}
             </button>
           )}
 
@@ -294,6 +211,15 @@ function App() {
             <button
               onClick={handleUnassignSeat}
               disabled={loadingAction || selectedSeat.id !== mySeatId}
+              style={{
+                padding: "10px 18px",
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "transparent",
+                color: "#e5e7eb",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
             >
               Unassign
             </button>

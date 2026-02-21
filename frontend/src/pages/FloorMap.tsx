@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getFloorMap } from "../api/floors";
 import { assignSeat, unassignSeat } from "../api/seatAssignments";
+import Seat from "../components/Seat";
 
-type Seat = {
+type SeatType = {
   id: string;
   seatCode: string;
   x: number;
@@ -14,7 +15,7 @@ type Seat = {
 
 export default function FloorMap() {
   const { floorId } = useParams<{ floorId: string }>();
-  const [seats, setSeats] = useState<Seat[]>([]);
+  const [seats, setSeats] = useState<SeatType[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function FloorMap() {
       });
   }, [floorId]);
 
-  async function handleSeatClick(seat: Seat) {
+  async function handleSeatClick(seat: SeatType) {
     if (!floorId) return;
     if (seat.isLocked) return;
 
@@ -52,24 +53,14 @@ export default function FloorMap() {
   return (
     <div style={{ position: "relative", width: 800, height: 600 }}>
       {seats.map((seat) => (
-        <div
-          key={seat.id}
-          onClick={() => handleSeatClick(seat)}
-          style={{
-            position: "absolute",
-            left: `${seat.x * 100}%`,
-            top: `${seat.y * 100}%`,
-            width: 20,
-            height: 20,
-            borderRadius: "50%",
-            cursor: seat.isLocked ? "not-allowed" : "pointer",
-            backgroundColor: seat.isLocked
-              ? "yellow"
-              : seat.isOccupied
-              ? "red"
-              : "green",
-          }}
-          title={seat.seatCode}
+        <Seat
+        key={seat.id}
+        seatCode={seat.seatCode}
+        x={seat.x}
+        y={seat.y}
+        isLocked={seat.isLocked}
+        isOccupied={seat.isOccupied}
+        onClick={() => handleSeatClick(seat)}
         />
       ))}
     </div>
