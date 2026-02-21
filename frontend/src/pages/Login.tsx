@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api/auth";
+import api from "../api/http";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,10 +17,22 @@ export default function LoginPage() {
     setError(null);
 
     try {
+      // 1️⃣ Login
       const res = await login(email, password);
       localStorage.setItem("token", res.access_token);
-      navigate("/"); // ProtectedRoute will redirect correctly
-    } catch {
+
+      // 2️⃣ Fetch floors for this organization
+      const floors = await api<{ id: string; name: string }[]>("/floors");
+
+      if (!floors.length) {
+        setError("No floors found for this organization.");
+        return;
+      }
+
+      // 3️⃣ Navigate to first available floor
+      const firstFloorId = floors[0].id;
+      navigate(`/floors/${firstFloorId}`);
+    } catch{
       setError("Invalid email or password");
     } finally {
       setLoading(false);
