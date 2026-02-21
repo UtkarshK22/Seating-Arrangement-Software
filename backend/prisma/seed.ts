@@ -68,8 +68,71 @@ async function main() {
       role: OrgRole.EMPLOYEE,
     },
   })
+
+  // =====================================================
+  // 5️⃣ CREATE BUILDING (REQUIRED FOR FLOOR ACCESS)
+  // =====================================================
+
+  const building = await prisma.building.upsert({
+    where: { id: 'demo-building-id' }, // fixed id for repeatable seed
+    update: {},
+    create: {
+      id: 'demo-building-id',
+      name: 'HQ Building',
+      organizationId: organization.id,
+    },
+  })
+
+  // =====================================================
+  // 6️⃣ CREATE FLOOR
+  // =====================================================
+
+  const floor = await prisma.floor.upsert({
+    where: { id: 'demo-floor-id' },
+    update: {},
+    create: {
+      id: 'demo-floor-id',
+      name: 'First Floor',
+      buildingId: building.id,
+      imageUrl: 'https://via.placeholder.com/1000x600',
+      width: 1000,
+      height: 600,
+    },
+  })
+
+  // =====================================================
+  // 7️⃣ CREATE SEATS
+  // =====================================================
+
+  // Delete existing seats for this floor (so seed is repeatable)
+  await prisma.seat.deleteMany({
+    where: {
+      floorId: floor.id,
+    },
+  })
+
+  const seatCount = 15
+
+  for (let i = 1; i <= seatCount; i++) {
+    await prisma.seat.create({
+      data: {
+        seatCode: `S-${i}`,
+        x: Math.random(),
+        y: Math.random(),
+        floorId: floor.id,
+        isLocked: false,
+      },
+    })
+  }
+
+  console.log('✅ Seed completed successfully')
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect())
+  .catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
