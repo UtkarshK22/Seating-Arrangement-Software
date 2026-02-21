@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { getFloorMap } from "../api/floors";
 import { assignSeat, unassignSeat } from "../api/seatAssignments";
 
@@ -12,18 +13,24 @@ type Seat = {
 };
 
 export default function FloorMap() {
-  const FLOOR_ID = "8e35e5eb-340b-47a2-92d2-56d62534eddf";
+  const { floorId } = useParams<{ floorId: string }>();
   const [seats, setSeats] = useState<Seat[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getFloorMap(FLOOR_ID).then((data) => {
-      setSeats(data.seats);
-      setLoading(false);
-    });
-  }, []);
+    if (!floorId) return;
+
+    getFloorMap(floorId)
+      .then((data) => {
+        setSeats(data.seats);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [floorId]);
 
   async function handleSeatClick(seat: Seat) {
+    if (!floorId) return;
     if (seat.isLocked) return;
 
     try {
@@ -33,7 +40,7 @@ export default function FloorMap() {
         await assignSeat(seat.id);
       }
 
-      const updated = await getFloorMap(FLOOR_ID);
+      const updated = await getFloorMap(floorId);
       setSeats(updated.seats);
     } catch {
       alert("Seat action failed");

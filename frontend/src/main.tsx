@@ -10,9 +10,7 @@ import "./index.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-
 import "@fontsource/jetbrains-mono/400.css";
-
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -20,15 +18,12 @@ createRoot(document.getElementById("root")!).render(
       {/* LOGIN */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* DEFAULT REDIRECT */}
+      {/* ROOT → just protect, no hardcoded floor */}
       <Route
         path="/"
         element={
           <ProtectedRoute>
-            <Navigate
-              to="/floors/8e35e5eb-340b-47a2-92d2-56d62534eddf"
-              replace
-            />
+            <Navigate to="/login" replace />
           </ProtectedRoute>
         }
       />
