@@ -1,35 +1,35 @@
 /**
  * Base API URL
- * - Uses Vite env variable in production
- * - Falls back to localhost for local development
+ * Must be defined in:
+ * .env
+ * .env.production
  */
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+if (!API_BASE_URL) {
+  throw new Error(
+    "❌ VITE_API_URL is not defined. Check your .env or .env.production file."
+  );
+}
 
 /**
- * Helper function to clean the token from localStorage
- * Handles cases where:
- * 1. Plain string: eyJ...
- * 2. Stringified string: "eyJ..."
- * 3. JSON object: { "access_token": "..." }
+ * Clean token helper
  */
 function getCleanToken(): string | null {
   const raw = localStorage.getItem("token");
   if (!raw) return null;
 
   try {
-    // Case 1: JSON object
     if (raw.trim().startsWith("{")) {
       const parsed = JSON.parse(raw);
       return parsed.access_token || parsed.token || null;
     }
 
-    // Case 2: Stringified string
     if (raw.startsWith('"') && raw.endsWith('"')) {
       return raw.slice(1, -1);
     }
   } catch {
-    // Ignore parse errors – assume raw token
+    // ignore
   }
 
   return raw;
@@ -62,22 +62,16 @@ export default async function api<T>(
       const body = await res.json();
       message = body?.message || message;
     } catch {
-      // Non-JSON error response
+      // ignore
     }
 
     if (res.status === 401) {
-      console.error(
-        "❌ 401 Unauthorized: Token is invalid, expired, or malformed."
-      );
-      // Optional future improvement:
-      // localStorage.removeItem("token");
-      // window.location.href = "/login";
+      console.error("❌ 401 Unauthorized");
     }
 
     throw new Error(message);
   }
 
-  // Handle empty responses (204, file downloads, etc.)
   const contentType = res.headers.get("content-type");
   if (!contentType || !contentType.includes("application/json")) {
     return null as T;

@@ -3,6 +3,7 @@ import { toast } from "react-hot-toast";
 import { SeatDetailsPanel } from "./SeatDetailsPanel";
 import { useParams } from "react-router-dom";
 import { runOptimistic } from "@utils/optimistic";
+import api from "../api/http";
 
 /* ===================== TYPES ===================== */
 
@@ -45,23 +46,15 @@ export function FloorMap() {
   /* ===================== FETCH FLOOR MAP ===================== */
 
   function refreshFloorMap() {
-    if (!floorId) return;
+  if (!floorId) return;
 
-    fetch(`http://localhost:3000/floors/${floorId}/map`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
+  api<{ floor: Floor; seats: Seat[] }>(`/floors/${floorId}/map`)
+    .then(data => {
+      setFloor(data.floor);
+      setSeats(data.seats);
     })
-      .then(res => {
-        if (!res.ok) throw new Error("API error");
-        return res.json();
-      })
-      .then(data => {
-        setFloor(data.floor);
-        setSeats(data.seats);
-      })
-      .catch(() => toast.error("Failed to load floor map"));
-  }
+    .catch(() => toast.error("Failed to load floor map"));
+}
 
   useEffect(() => {
     refreshFloorMap();
@@ -117,12 +110,8 @@ export function FloorMap() {
         optimistic: () => {},
         rollback: () => {},
         request: () =>
-          fetch("http://localhost:3000/seat-assignments/auto-assign", {
+          api("/seat-assignments/auto-assign", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
             body: JSON.stringify({
               seatIds: [...selectedSeatIds],
             }),

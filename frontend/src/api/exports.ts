@@ -1,4 +1,4 @@
-import api from './http';
+import api from "./http";
 
 export type LastExportResponse = {
   exportedAt: string;
@@ -16,27 +16,23 @@ export type ExportHistoryItem = {
 };
 
 export async function getLastExport() {
-  return api<LastExportResponse | null>('/exports/last');
+  return api<LastExportResponse | null>("/exports/last");
 }
 
 export async function getExportHistory() {
-  return api<{ data: ExportHistoryItem[] }>('/exports/history');
+  return api<{ data: ExportHistoryItem[] }>("/exports/history");
 }
 
 export async function getSeatAuditDownloadUrl() {
   return api<{ url: string }>("/exports/seat-audit/download");
 }
 
-export function downloadSeatAuditCSV() {
-  const token = localStorage.getItem("token");
+export async function downloadSeatAuditCSV() {
+  const data = await getSeatAuditDownloadUrl();
 
-  if (!token) {
-    throw new Error("Not authenticated");
+  if (!data?.url) {
+    throw new Error("Download URL not found");
   }
 
-  window.open(
-    `http://localhost:3000/exports/seat-audit`,
-    "_blank"
-  );
-  
+  window.open(data.url, "_blank");
 }
