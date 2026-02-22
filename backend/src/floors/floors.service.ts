@@ -8,6 +8,38 @@ import { PrismaService } from '../prisma/prisma.service';
 export class FloorsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async updateLayout(
+  floorId: string,
+  seats: { id: string; x: number; y: number }[]
+) {
+  const seatIds = seats.map((s) => s.id);
+
+  const existingSeats = await this.prisma.seat.findMany({
+    where: {
+      id: { in: seatIds },
+      floorId,
+    },
+  });
+
+  if (existingSeats.length !== seats.length) {
+    throw new Error('Some seats not found on this floor');
+  }
+
+  const updates = seats.map((seat) =>
+    this.prisma.seat.update({
+      where: { id: seat.id },
+      data: {
+        x: seat.x,
+        y: seat.y,
+      },
+    })
+  );
+
+  await this.prisma.$transaction(updates);
+
+  return { message: 'Layout updated successfully' };
+}
+
   // =========================
   // GET ALL FLOORS (ORG SAFE)
   // =========================

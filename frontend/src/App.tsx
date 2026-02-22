@@ -67,6 +67,8 @@ function App() {
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignSeat, setReassignSeat] = useState<SeatType | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   /* ===================== LOAD FLOOR MAP ===================== */
 
@@ -77,6 +79,7 @@ function App() {
         seat.id === id ? { ...seat, x: x / 100, y: y / 100 } : seat
       )
     );
+    setHasUnsavedChanges(true);
     // TODO: persist to backend e.g. api(`/seats/${id}/position`, { method: "PATCH", body: JSON.stringify({ x: x / 100, y: y / 100 }) })
   };
 
@@ -91,6 +94,7 @@ function App() {
 
       setFloor(floorData.floor);
       setSeats(floorData.seats);
+      setHasUnsavedChanges(false);
 
       if (mySeat) {
         setMySeatId(mySeat.seatId);
@@ -153,6 +157,31 @@ function App() {
     }
   };
 
+  const handleSaveLayout = async () => {
+  if (!floorId) return;
+
+  try {
+    setIsSaving(true);
+
+    await api(`/floors/${floorId}/layout`, {
+      method: "PUT",
+      body: JSON.stringify(
+        seats.map(({ id, x, y }) => ({
+          id,
+          x,
+          y,
+        }))
+      ),
+    });
+
+    setHasUnsavedChanges(false);
+  } catch {
+    setError("Failed to save layout");
+  } finally {
+    setIsSaving(false);
+  }
+};
+
   /* ===================== UI STATES ===================== */
 
   if (isLoading || !user) return null;
@@ -188,9 +217,13 @@ function App() {
       <div style={{ marginBottom: 16 }}>
         <button
           onClick={() => {
-            setIsEditMode((prev) => !prev);
-            // Clear selection when toggling edit mode
-            setSelectedSeat(null);
+            if (isEditMode && hasUnsavedChanges) {
+              const confirmExit = window.confirm(
+                "You have unsaved changes. Exit without saving?"
+              );
+            if (!confirmExit) return;
+            }
+          setIsEditMode((prev) => !prev);
           }}
           style={{
             padding: "8px 16px",
@@ -206,6 +239,41 @@ function App() {
           {isEditMode ? "Exit Edit Mode" : "Enter Edit Mode"}
         </button>
       </div>
+
+      {isEditMode && (
+        <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
+          {hasUnsavedChanges && (
+            <button
+              onClick={handleSaveLayout}
+              disabled={isSaving}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "none",
+                background: "#16a34a",
+                color: "#fff",
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: isSaving ? 0.7 : 1,
+              }}
+            >
+              {isSaving ? "Saving..." : "Save Layout"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {isEditMode && hasUnsavedChanges && (
+        <div
+          style={{
+            marginBottom: 12,
+            color: "#facc15",
+            fontWeight: 600,
+          }}
+        >
+          Unsaved layout changes
+        </div>
+      )}
 
       <FloorMapCanvas
         floor={safeFloor}

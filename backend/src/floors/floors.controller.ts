@@ -1,4 +1,5 @@
 import {
+  Put,
   Controller,
   Get,
   Post,
@@ -19,6 +20,14 @@ export class FloorsController {
   constructor(
     private readonly floorsService: FloorsService,
   ) {}
+
+  @Put(':floorId/layout')
+  async updateLayout(
+    @Param('floorId') floorId: string,
+    @Body() seats: { id: string; x: number; y: number }[]
+  ) {
+    return this.floorsService.updateLayout(floorId, seats);
+  }
 
   // =========================
   // GET ALL FLOORS (ORG SAFE)
