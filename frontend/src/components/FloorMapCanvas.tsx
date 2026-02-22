@@ -2,6 +2,7 @@ import {
   TransformWrapper,
   TransformComponent,
   useControls,
+  useTransformContext,
 } from "react-zoom-pan-pinch";
 import Seat from "./Seat";
 
@@ -27,14 +28,15 @@ type Props = {
   seats: SeatType[];
   selectedSeatId: string | null;
   mySeatId: string | null;
-  onSeatSelect: (seat: SeatType) => void;
+  onSeatSelect: (seat: SeatType | null) => void;
+  onSeatPositionChange: (id: string, x: number, y: number) => void;
+  isEditMode: boolean;
 };
 
 /* ===================== ZOOM CONTROLS ===================== */
 
 function ZoomControls() {
   const { zoomIn, zoomOut, resetTransform } = useControls();
-
   const buttonStyle: React.CSSProperties = {
     padding: "8px 12px",
     borderRadius: 10,
@@ -48,8 +50,7 @@ function ZoomControls() {
 
   const hoverGlow = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.borderColor = "#6366f1";
-    e.currentTarget.style.boxShadow =
-      "0 0 14px rgba(99,102,241,0.6)";
+    e.currentTarget.style.boxShadow = "0 0 14px rgba(99,102,241,0.6)";
   };
 
   const removeGlow = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -69,45 +70,74 @@ function ZoomControls() {
         gap: 8,
       }}
     >
-      <button
-        onClick={() => zoomIn()}
-        style={buttonStyle}
-        onMouseEnter={hoverGlow}
-        onMouseLeave={removeGlow}
-      >
-        +
-      </button>
+      <button onClick={() => zoomIn()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>+</button>
+      <button onClick={() => zoomOut()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>−</button>
+      <button onClick={() => resetTransform()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>Reset</button>
+    </div>
+  );
+}
 
-      <button
-        onClick={() => zoomOut()}
-        style={buttonStyle}
-        onMouseEnter={hoverGlow}
-        onMouseLeave={removeGlow}
-      >
-        −
-      </button>
+/* ===================== SEAT LAYER (needs transform context) ===================== */
 
-      <button
-        onClick={() => resetTransform()}
-        style={buttonStyle}
-        onMouseEnter={hoverGlow}
-        onMouseLeave={removeGlow}
-      >
-        Reset
-      </button>
+function SeatLayer({
+  floor,
+  seats,
+  selectedSeatId,
+  mySeatId,
+  onSeatSelect,
+  onSeatPositionChange,
+  isEditMode,
+}: Props) {
+  const { transformState } = useTransformContext();
+  const currentScale = transformState.scale;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 900,
+        aspectRatio: `${floor.width} / ${floor.height}`,
+        backgroundImage: `url(${floor.imageUrl})`,
+        backgroundSize: "contain",
+        backgroundRepeat: "no-repeat",
+        border: "1px solid #374151",
+      }}
+      // Clicking the background clears selection
+      onClick={() => onSeatSelect(null)}
+    >
+      {seats.map((seat) => {
+        const isMySeat = seat.id === mySeatId;
+        const disabled = seat.isLocked || (seat.isOccupied && !isMySeat);
+
+        return (
+          <Seat
+            key={seat.id}
+            seatCode={seat.seatCode}
+            x={seat.x * 100}
+            y={seat.y * 100}
+            isLocked={seat.isLocked}
+            isOccupied={seat.isOccupied && !isMySeat}
+            isSelected={selectedSeatId === seat.id}
+            isEditMode={isEditMode}
+            currentScale={currentScale}
+            onDragStart={() => {}}
+            onDragEnd={(newX, newY) => {
+              onSeatPositionChange(seat.id, newX, newY);
+            }}
+            onClick={() => {
+              if (disabled) return;
+              onSeatSelect(seat);
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
 
 /* ===================== CANVAS ===================== */
 
-export default function FloorMapCanvas({
-  floor,
-  seats,
-  selectedSeatId,
-  mySeatId,
-  onSeatSelect,
-}: Props) {
+export default function FloorMapCanvas(props: Props) {
   return (
     <TransformWrapper
       initialScale={1}
@@ -115,43 +145,11 @@ export default function FloorMapCanvas({
       maxScale={3}
       wheel={{ step: 0.1 }}
       doubleClick={{ disabled: true }}
+      panning={{ disabled: props.isEditMode }}
     >
       <ZoomControls />
-
       <TransformComponent>
-        <div
-          style={{
-            position: "relative",
-            width: 900,
-            aspectRatio: `${floor.width} / ${floor.height}`,
-            backgroundImage: `url(${floor.imageUrl})`,
-            backgroundSize: "contain",
-            backgroundRepeat: "no-repeat",
-            border: "1px solid #374151",
-          }}
-        >
-          {seats.map((seat) => {
-            const isMySeat = seat.id === mySeatId;
-            const disabled =
-              seat.isLocked || (seat.isOccupied && !isMySeat);
-
-            return (
-              <Seat
-                key={seat.id}
-                seatCode={seat.seatCode}
-                x={seat.x * 100}
-                y={seat.y * 100}
-                isLocked={seat.isLocked}
-                isOccupied={seat.isOccupied && !isMySeat}
-                isSelected={selectedSeatId === seat.id}
-                onClick={() => {
-                  if (disabled) return;
-                  onSeatSelect(seat);
-                }}
-              />
-            );
-          })}
-        </div>
+        <SeatLayer {...props} />
       </TransformComponent>
     </TransformWrapper>
   );

@@ -66,8 +66,19 @@ function App() {
 
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignSeat, setReassignSeat] = useState<SeatType | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   /* ===================== LOAD FLOOR MAP ===================== */
+
+  // x and y come in as percent (0-100) from Seat.tsx, store as fraction (0-1)
+  const handleSeatPositionChange = (id: string, x: number, y: number) => {
+    setSeats((prev) =>
+      prev.map((seat) =>
+        seat.id === id ? { ...seat, x: x / 100, y: y / 100 } : seat
+      )
+    );
+    // TODO: persist to backend e.g. api(`/seats/${id}/position`, { method: "PATCH", body: JSON.stringify({ x: x / 100, y: y / 100 }) })
+  };
 
   const loadFloorMap = async () => {
     if (!floorId) return;
@@ -174,13 +185,36 @@ function App() {
         <LegendDot color="#6b7280" label="Locked" />
       </div>
 
-      {/* 🔥 Refactored Canvas Component */}
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => {
+            setIsEditMode((prev) => !prev);
+            // Clear selection when toggling edit mode
+            setSelectedSeat(null);
+          }}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 8,
+            border: "1px solid #475569",
+            background: isEditMode ? "#dc2626" : "#0f172a",
+            color: "#e5e7eb",
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+          }}
+        >
+          {isEditMode ? "Exit Edit Mode" : "Enter Edit Mode"}
+        </button>
+      </div>
+
       <FloorMapCanvas
         floor={safeFloor}
         seats={seats}
         selectedSeatId={selectedSeat?.id ?? null}
         mySeatId={mySeatId}
-        onSeatSelect={setSelectedSeat}
+        onSeatSelect={(seat) => setSelectedSeat(seat)}
+        onSeatPositionChange={handleSeatPositionChange}
+        isEditMode={isEditMode}
       />
 
       {selectedSeat && (

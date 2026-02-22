@@ -9,12 +9,18 @@
   font-size: 9px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  /* transition handles scale, box-shadow, and border smoothly */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   user-select: none;
   border: 2px solid white;
-  position: absolute;
   z-index: 1;
+}
+
+/* Hover zoom for all non-locked seats */
+.available:hover,
+.occupied:hover {
+  transform: scale(1.15);
 }
 
 .available {
@@ -62,8 +68,10 @@
   fill: #1f2937;
 }
 
+/* Selected: scale + purple glow. Must NOT be overridden by inline styles. */
 .selected {
   z-index: 5;
+  transform: scale(1.15);
   box-shadow:
     0 0 0 3px #6366f1,
     0 0 12px rgba(99, 102, 241, 0.8),
