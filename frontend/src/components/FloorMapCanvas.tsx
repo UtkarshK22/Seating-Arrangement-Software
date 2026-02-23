@@ -5,6 +5,7 @@ import {
   useTransformContext,
 } from "react-zoom-pan-pinch";
 import Seat from "./Seat";
+import api from "@api/http";
 
 type Floor = {
   id: string;
@@ -31,12 +32,14 @@ type Props = {
   onSeatSelect: (seat: SeatType | null) => void;
   onSeatPositionChange: (id: string, x: number, y: number) => void;
   isEditMode: boolean;
+  isAddSeatMode: boolean;
 };
 
 /* ===================== ZOOM CONTROLS ===================== */
 
 function ZoomControls() {
   const { zoomIn, zoomOut, resetTransform } = useControls();
+
   const buttonStyle: React.CSSProperties = {
     padding: "8px 12px",
     borderRadius: 10,
@@ -46,16 +49,6 @@ function ZoomControls() {
     fontWeight: 600,
     cursor: "pointer",
     transition: "all 0.2s ease",
-  };
-
-  const hoverGlow = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.borderColor = "#6366f1";
-    e.currentTarget.style.boxShadow = "0 0 14px rgba(99,102,241,0.6)";
-  };
-
-  const removeGlow = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.borderColor = "#334155";
-    e.currentTarget.style.boxShadow = "none";
   };
 
   return (
@@ -70,14 +63,14 @@ function ZoomControls() {
         gap: 8,
       }}
     >
-      <button onClick={() => zoomIn()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>+</button>
-      <button onClick={() => zoomOut()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>−</button>
-      <button onClick={() => resetTransform()} style={buttonStyle} onMouseEnter={hoverGlow} onMouseLeave={removeGlow}>Reset</button>
+      <button onClick={() => zoomIn()} style={buttonStyle}>+</button>
+      <button onClick={() => zoomOut()} style={buttonStyle}>−</button>
+      <button onClick={() => resetTransform()} style={buttonStyle}>Reset</button>
     </div>
   );
 }
 
-/* ===================== SEAT LAYER (needs transform context) ===================== */
+/* ===================== SEAT LAYER ===================== */
 
 function SeatLayer({
   floor,
@@ -87,9 +80,37 @@ function SeatLayer({
   onSeatSelect,
   onSeatPositionChange,
   isEditMode,
+  isAddSeatMode,
 }: Props) {
   const { transformState } = useTransformContext();
   const currentScale = transformState.scale;
+
+  const handleBackgroundClick = async (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    if (!isAddSeatMode) {
+      onSeatSelect(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    const seatCode = prompt("Enter seat code:");
+    if (!seatCode) return;
+
+    try {
+      await api(`/seats/${floor.id}`, {
+        method: "POST",
+        body: JSON.stringify({ seatCode, x, y }),
+      });
+
+      window.location.reload();
+    } catch {
+      alert("Failed to create seat");
+    }
+  };
 
   return (
     <div
@@ -102,8 +123,7 @@ function SeatLayer({
         backgroundRepeat: "no-repeat",
         border: "1px solid #374151",
       }}
-      // Clicking the background clears selection
-      onClick={() => onSeatSelect(null)}
+      onClick={handleBackgroundClick}
     >
       {seats.map((seat) => {
         const isMySeat = seat.id === mySeatId;

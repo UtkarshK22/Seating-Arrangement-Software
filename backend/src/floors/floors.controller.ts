@@ -13,6 +13,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { UpdateSeatPositionDto } from './dto/update-layout.dto';
 
 @Controller('floors')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,9 +23,10 @@ export class FloorsController {
   ) {}
 
   @Put(':floorId/layout')
+  @Roles('OWNER', 'ADMIN')
   async updateLayout(
     @Param('floorId') floorId: string,
-    @Body() seats: { id: string; x: number; y: number }[]
+    @Body() seats: UpdateSeatPositionDto[]
   ) {
     return this.floorsService.updateLayout(floorId, seats);
   }

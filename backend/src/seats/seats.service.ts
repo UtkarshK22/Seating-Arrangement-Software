@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { SeatAuditService } from "../seat-audit/seat-audit.service";
 import { SeatAuditAction } from "@prisma/client";
-
+import { CreateSeatDto } from "./dto/create-seat.dto";
 
 @Injectable()
 export class SeatsService {
@@ -12,6 +12,35 @@ export class SeatsService {
   ) {}
 
   // ---------- CREATE SEAT ----------
+  
+  async createSeat(
+  floorId: string,
+  organizationId: string,
+  dto: CreateSeatDto,
+) {
+  // Validate floor belongs to org
+  const floor = await this.prisma.floor.findFirst({
+    where: {
+      id: floorId,
+    },
+  });
+
+  if (!floor) {
+    throw new Error('Floor not found');
+  }
+
+  return this.prisma.seat.create({
+    data: {
+      seatCode: dto.seatCode,
+      x: dto.x,
+      y: dto.y,
+      floorId,
+      isLocked: false,
+      // isOccupied: false,
+    },
+  });
+}
+
   async create(data: {
     seatCode: string;
     x: number;

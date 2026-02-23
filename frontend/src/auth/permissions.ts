@@ -20,3 +20,7 @@ export const permissions = {
   VIEW_AUDIT_LOGS: [Role.OWNER, Role.ADMIN],
   EXPORT_AUDIT: [Role.OWNER, Role.ADMIN],
 } as const;
+
+export function canEditFloor(role: string) {
+  return role === "OWNER" || role === "ADMIN";
+}

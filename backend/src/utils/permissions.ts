@@ -7,5 +7,5 @@ export type OrgRole =
   | 'GUEST';
 
 export function canViewSeatAudit(role: OrgRole) {
-  return role === 'OWNER' || role === 'ADMIN' || role === 'HR' || role === 'MANAGER';
+  return role === 'OWNER' || role === 'ADMIN';
 }

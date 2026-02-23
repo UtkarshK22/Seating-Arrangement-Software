@@ -7,6 +7,7 @@ import ReassignSeatModal from "./components/ReassignSeatModal";
 import { can } from "./auth/can";
 import { MySeatInfoCard } from "./components/MySeatInfoCard";
 import FloorMapCanvas from "./components/FloorMapCanvas";
+import { canEditFloor } from "./auth/permissions";
 
 /* ===================== TYPES ===================== */
 
@@ -69,6 +70,7 @@ function App() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAddSeatMode, setIsAddSeatMode] = useState(false);
 
   /* ===================== LOAD FLOOR MAP ===================== */
 
@@ -283,6 +285,7 @@ function App() {
         onSeatSelect={(seat) => setSelectedSeat(seat)}
         onSeatPositionChange={handleSeatPositionChange}
         isEditMode={isEditMode}
+        isAddSeatMode={isAddSeatMode} 
       />
 
       {selectedSeat && (
@@ -308,6 +311,24 @@ function App() {
               {loadingAction ? "Processing..." : "Assign to Me"}
             </button>
           )}
+
+          {canEditFloor(role) && isEditMode && (
+            <button
+            onClick={() => setIsAddSeatMode(prev => !prev)}
+            style={{
+              marginLeft: 12,
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "1px solid #475569",
+              background: isAddSeatMode ? "#16a34a" : "#0f172a",
+              color: "#e5e7eb",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {isAddSeatMode ? "Cancel Add Seat" : "Add Seat"}
+          </button>
+        )}
 
           {can(role, "SEAT_ASSIGN_SELF") && (
             <button
