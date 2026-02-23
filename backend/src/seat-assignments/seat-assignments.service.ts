@@ -81,6 +81,31 @@ export class SeatAssignmentsService {
       return assignment;
     });
   }
+    /* =========================================================
+     ADMIN UNASSIGN
+  ========================================================= */
+
+  async unassignSeat(userId: string, seatId: string) {
+  const assignment = await this.prisma.seatAssignment.findFirst({
+    where: {
+      userId,
+      seatId,
+      isActive: true,
+    },
+  });
+
+  if (!assignment) {
+    throw new BadRequestException("No active assignment found");
+  }
+
+  return this.prisma.seatAssignment.update({
+    where: { id: assignment.id },
+    data: {
+      isActive: false,
+      unassignedAt: new Date(),
+    },
+  });
+}
 
   /* =========================================================
      ADMIN REASSIGN (DRAG & DROP)

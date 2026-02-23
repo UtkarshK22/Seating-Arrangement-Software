@@ -10,6 +10,8 @@ interface SeatProps {
   isOccupied: boolean;
   isSelected?: boolean;
   isEditMode?: boolean;
+  isHighlighted?: boolean;
+  disabled?: boolean;
   currentScale?: number;
   onClick?: () => void;
   onDragStart?: () => void;
@@ -24,6 +26,8 @@ export default function Seat({
   isOccupied,
   isSelected = false,
   isEditMode = false,
+  isHighlighted = false,
+  disabled = false,
   currentScale = 1,
   onClick,
   onDragStart,
@@ -39,6 +43,10 @@ export default function Seat({
 
   const getStatusClass = () => {
     if (isLocked) return styles.locked;
+
+    // ✅ Highlight overrides normal occupied color
+    if (isHighlighted) return styles.highlighted;
+
     if (isOccupied) return styles.occupied;
     return styles.available;
   };
@@ -50,7 +58,7 @@ export default function Seat({
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isEditMode) return;
+    if (!isEditMode || disabled) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -77,7 +85,7 @@ export default function Seat({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isEditMode || !dragState.current) return;
+    if (!isEditMode || !dragState.current || disabled) return;
 
     const { startPointerX, startPointerY, parentRect } = dragState.current;
     dragState.current = null;
@@ -86,9 +94,9 @@ export default function Seat({
     const deltaX = (e.clientX - startPointerX) / currentScale;
     const deltaY = (e.clientY - startPointerY) / currentScale;
 
-    // Small movement = treat as click (select seat)
+    // Small movement = treat as click
     if (Math.abs(deltaX) < 4 && Math.abs(deltaY) < 4) {
-      onClick?.();
+      if (!disabled) onClick?.();
       return;
     }
 
@@ -104,6 +112,7 @@ export default function Seat({
   const visualLeft = dragOffset
     ? `calc(${x}% - 8px + ${dragOffset.dx}px)`
     : `calc(${x}% - 8px)`;
+
   const visualTop = dragOffset
     ? `calc(${y}% - 8px + ${dragOffset.dy}px)`
     : `calc(${y}% - 8px)`;
@@ -117,9 +126,10 @@ export default function Seat({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onClick={(e) => {
-              // CRITICAL: stop propagation so background div doesn't
-              // fire onSeatSelect(null) and immediately kill the glow
               e.stopPropagation();
+
+              if (disabled) return;
+
               if (!isEditMode && !isLocked) {
                 onClick?.();
               }
@@ -131,15 +141,20 @@ export default function Seat({
               position: "absolute",
               left: visualLeft,
               top: visualTop,
-              // Do NOT set transform or transition inline — let CSS handle it.
-              // Inline styles override CSS class rules and break the glow/scale.
-              cursor: isEditMode ? (dragOffset ? "grabbing" : "grab") : "pointer",
+              cursor: disabled
+                ? "not-allowed"
+                : isEditMode
+                ? dragOffset
+                  ? "grabbing"
+                  : "grab"
+                : "pointer",
               zIndex: dragOffset ? 100 : isSelected ? 5 : 1,
-              // Disable transition while actively dragging so seat follows cursor instantly
               transition: dragOffset ? "none" : undefined,
+              opacity: disabled ? 0.6 : 1,
             }}
           />
         </Tooltip.Trigger>
+
         <Tooltip.Portal>
           <Tooltip.Content
             className={styles.tooltip}

@@ -6,16 +6,13 @@ export class CreateSeatDto {
 
   @IsNumber()
   @Min(0)
-  @Max(100)
+  @Max(1)
   x: number;
 
   @IsNumber()
   @Min(0)
-  @Max(100)
+  @Max(1)
   y: number;
-
-  @IsUUID()
-  floorId: string;
 
   @IsOptional()
   @IsBoolean()

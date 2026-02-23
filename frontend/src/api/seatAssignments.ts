@@ -1,31 +1,15 @@
 import api from "./http";
 
-export async function reassignSeat(
-  userId: string,
-  targetSeatId: string,
-  force = false,
-) {
-  return api("/seat-assignments/reassign", {
+//  Admin assign seat to specific user
+export function assignSeatToUser(seatId: string, userId: string) {
+  return api(`/seat-assignments/${seatId}/assign/${userId}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      userId,
-      targetSeatId,
-      force,
-    }),
-  });
-}
-export async function assignSeat(seatId: string) {
-  return api("/seat-assignments/assign", {
-    method: "POST",
-    body: JSON.stringify({ seatId }),
   });
 }
 
-export async function unassignSeat() {
-  return api("/seat-assignments/unassign", {
+//  Unassign specific seat
+export function unassignSeat(seatId: string) {
+  return api(`/seat-assignments/${seatId}/unassign`, {
     method: "POST",
   });
 }

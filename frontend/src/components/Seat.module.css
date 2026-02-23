@@ -68,6 +68,11 @@
   fill: #1f2937;
 }
 
+.highlighted {
+  background-color: #4caf50 !important;
+  box-shadow: 0 0 10px #4caf50aa;
+}
+
 /* Selected: scale + purple glow. Must NOT be overridden by inline styles. */
 .selected {
   z-index: 5;

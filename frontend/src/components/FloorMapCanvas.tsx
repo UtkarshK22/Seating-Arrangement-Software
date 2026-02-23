@@ -94,8 +94,8 @@ function SeatLayer({
     }
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    const x = ((e.clientX - rect.left) / rect.width);
+    const y = ((e.clientY - rect.top) / rect.height);
 
     const seatCode = prompt("Enter seat code:");
     if (!seatCode) return;

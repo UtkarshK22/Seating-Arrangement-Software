@@ -29,8 +29,8 @@ export class SeatAssignmentsController {
     @Body('seatId') seatId: string,
   ) {
     return this.seatService.assignSeat(
-      req.user.userId, // actor
-      req.user.userId, // target user (self)
+      req.user.userId,
+      req.user.userId,
       seatId,
     );
   }
@@ -41,8 +41,8 @@ export class SeatAssignmentsController {
   @Post('unassign')
   unassignSeat(@Req() req) {
     return this.seatService.unassignSeatByUser(
-      req.user.userId, // actor
-      req.user.userId, // target user (self)
+      req.user.userId,
+      req.user.userId,
     );
   }
 
@@ -69,7 +69,7 @@ export class SeatAssignmentsController {
      ========================= */
   @Post('unassign/seat/:seatId')
   @UseGuards(RolesGuard)
-  @Roles('OWNER', 'ADMIN')
+  @Roles('OWNER', 'ADMIN', 'HR', 'MANAGER')
   unassignSeatBySeat(
     @Req() req,
     @Param('seatId') seatId: string,
@@ -91,9 +91,9 @@ export class SeatAssignmentsController {
     @Body() dto: ReassignSeatDto,
   ) {
     return this.seatService.reassignSeatByAdmin(
-      req.user.userId,      // actor (admin)
-      dto.userId,           // target user
-      dto.targetSeatId,     // new seat
+      req.user.userId,
+      dto.userId,
+      dto.targetSeatId,
       dto.force ?? false,
     );
   }
