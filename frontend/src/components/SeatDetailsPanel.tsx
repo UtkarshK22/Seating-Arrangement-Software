@@ -1,17 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-
-import { getUsers } from "../api/users";
-import { unassignSeat, reassignSeat } from "../api/seatAssignments";
-import { toggleSeatLock } from "../api/seats";
-import { SeatAuditTable } from "./SeatAuditTable";
-
-/* AUTH & RBAC */
-import { useAuth } from "@auth/useAuth";
-import { getSeatContext } from "@seats/seatContext";
-
-/* OPTIMISTIC UPDATES */
-import { runOptimistic } from "@utils/optimistic";
+import api from "../api/http";
 
 /* ===================== TYPES ===================== */
 
@@ -24,311 +13,339 @@ type AssignedUser = {
 type Seat = {
   id: string;
   seatCode: string;
+  x?: number;
+  y?: number;
   isLocked: boolean;
   isOccupied: boolean;
-  assignedUser: AssignedUser | null;
-};
-
-type User = {
-  id: string;
-  fullName: string;
+  assignedUser?: AssignedUser | null;
 };
 
 type Props = {
-  seat: Seat | null;
+  seat: Seat;
   moveFromSeat: Seat | null;
   onClose: () => void;
-  onUpdated: () => void;
+  onRefresh: () => void;
   onOptimisticUpdate: (
     seatId: string,
     assignedUser: AssignedUser | null
   ) => void;
-  onOptimisticLockUpdate: (
-    seatId: string,
-    isLocked: boolean
-  ) => void;
+  onOptimisticLockUpdate: (seatId: string, isLocked: boolean) => void;
 };
 
 /* ===================== COMPONENT ===================== */
 
-export function SeatDetailsPanel({
+export default function SeatDetailsPanel({
   seat,
-  moveFromSeat,
   onClose,
-  onUpdated,
+  onRefresh,
   onOptimisticUpdate,
   onOptimisticLockUpdate,
 }: Props) {
-  const { user, isLoading } = useAuth();
-
-  const [users, setUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [occupant, setOccupant] = useState<AssignedUser | null>(null);
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmUnassign, setConfirmUnassign] = useState(false);
+  const [users, setUsers] = useState<AssignedUser[]>([]);
+  const [query, setQuery] = useState("");
 
-  /* ===================== LOAD USERS ===================== */
+  /* ===================== LOAD OCCUPANT + USERS ===================== */
 
   useEffect(() => {
-    if (isLoading) return;
-    if (!user) return;
-    if (!seat) return;
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [seatUser, allUsers] = await Promise.all([
+          api<AssignedUser | null>(`/seat-assignments/seat/${seat.id}`),
+          api<AssignedUser[]>(`/users`),
+        ]);
 
-    setSelectedUserId(null);
-    getUsers()
-      .then(setUsers)
-      .catch(() => toast.error("Failed to load users"));
-  }, [seat, user, isLoading]);
-
-   /* ===================== AUTH GUARD ===================== */
-
-  if (isLoading) return null;
-  if (!user) return null;
-
-  /* ===================== SEAT CONTEXT ===================== */
-
-  const ctx = seat
-    ? getSeatContext({
-        seat: {
-          id: seat.id,
-          isLocked: seat.isLocked,
-          isOccupied: seat.isOccupied,
-          assignedUserId: seat.assignedUser?.id ?? null,
-        },
-        currentUserId: user.id,
-        role: user.role,
-      })
-    : null;
-
-  /* ===================== ASSIGN ===================== */
-
-  async function handleAssign(override = false) {
-    if (!seat || !selectedUserId) {
-      toast.error("Select a user");
-      return;
-    }
-
-    const prevUser = seat.assignedUser;
-    const selected = users.find(u => u.id === selectedUserId);
-
-    const nextUser = selected
-      ? {
-          id: selected.id,
-          fullName: selected.fullName,
-          email: prevUser?.email ?? "",
-        }
-      : null;
-
-    setLoading(true);
-
-    try {
-      await runOptimistic({
-        optimistic: () =>
-          onOptimisticUpdate(seat.id, nextUser),
-        rollback: () =>
-          onOptimisticUpdate(seat.id, prevUser),
-        request: () =>
-          reassignSeat(selectedUserId, seat.id, override),
-        successMessage: "Seat assigned",
-        errorMessage: "Assignment failed",
-      });
-
-      onUpdated();
-      onClose();
-    } catch (err: unknown) {
-      const error = err as { status?: number };
-
-      if (error?.status === 403 && seat.isLocked && !override) {
-        if (window.confirm("Seat is locked. Override?")) {
-          handleAssign(true);
-        }
+        setOccupant(seatUser);
+        setUsers(allUsers);
+      } catch {
+        toast.error("Failed to load seat data");
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadData();
+  }, [seat.id]);
 
   /* ===================== UNASSIGN ===================== */
 
   async function handleUnassign() {
-    if (!seat?.assignedUser || loading) return;
+    if (!occupant) return;
 
-    setLoading(true);
+    setActionLoading(true);
 
     try {
-      await runOptimistic({
-        optimistic: () =>
-          onOptimisticUpdate(seat.id, null),
-        rollback: () =>
-          onOptimisticUpdate(seat.id, seat.assignedUser),
-        request: () => unassignSeat(),
-        successMessage: "Seat unassigned",
-        errorMessage: "Unassign failed",
+      onOptimisticUpdate(seat.id, null);
+
+      await api(`/seat-assignments/unassign/seat/${seat.id}`, {
+        method: "POST",
       });
 
-      onUpdated();
-      onClose();
+      toast.success("Seat unassigned");
+      setOccupant(null);
+    } catch {
+      toast.error("Failed to unassign");
+      onRefresh();
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
-  /* ===================== MOVE SEAT ===================== */
+  /* ===================== ASSIGN USER ===================== */
 
-  async function handleMoveSeat(override = false) {
-    if (!seat || !moveFromSeat?.assignedUser) return;
-
-    const movingUser = moveFromSeat.assignedUser;
-
-    setLoading(true);
+  async function handleAssign(user: AssignedUser) {
+    setActionLoading(true);
 
     try {
-      await runOptimistic({
-        optimistic: () => {
-          onOptimisticUpdate(moveFromSeat.id, null);
-          onOptimisticUpdate(seat.id, movingUser);
-        },
-        rollback: () => {
-          onOptimisticUpdate(moveFromSeat.id, movingUser);
-          onOptimisticUpdate(seat.id, seat.assignedUser);
-        },
-        request: () =>
-          reassignSeat(movingUser.id, seat.id, override),
-        successMessage: "Seat reassigned",
-        errorMessage: "Reassignment failed",
+      onOptimisticUpdate(seat.id, user);
+
+      await api(`/seat-assignments/${seat.id}/assign/${user.id}`, {
+        method: "POST",
       });
 
-      onUpdated();
-      onClose();
-    } catch (err: unknown) {
-      const error = err as { status?: number };
-      if (error?.status === 403 && seat.isLocked && !override) {
-        if (window.confirm("Target seat is locked. Override?")) {
-          handleMoveSeat(true);
-        }
-      }
+      toast.success("User assigned");
+      setOccupant(user);
+    } catch {
+      toast.error("Assignment failed");
+      onRefresh();
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
   /* ===================== LOCK / UNLOCK ===================== */
 
   async function handleToggleLock() {
-    if (!seat) return;
-
-    const next = !seat.isLocked;
-
-    setLoading(true);
+    setActionLoading(true);
 
     try {
-      await runOptimistic({
-        optimistic: () =>
-          onOptimisticLockUpdate(seat.id, next),
-        rollback: () =>
-          onOptimisticLockUpdate(seat.id, seat.isLocked),
-        request: () =>
-          toggleSeatLock(seat.id, next),
-        successMessage: next ? "Seat locked" : "Seat unlocked",
-        errorMessage: "Failed to update lock",
+      onOptimisticLockUpdate(seat.id, !seat.isLocked);
+
+      await api(`/seats/${seat.id}/lock`, {
+        method: "PATCH",
+        body: JSON.stringify({ isLocked: !seat.isLocked }),
       });
 
-      onUpdated();
+      toast.success(seat.isLocked ? "Seat unlocked" : "Seat locked");
+    } catch {
+      toast.error("Failed to update lock state");
+      onRefresh();
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
+
+  /* ===================== FILTER USERS ===================== */
+
+  const filteredUsers = users.filter((u) =>
+    u.fullName.toLowerCase().includes(query.toLowerCase())
+  );
 
   /* ===================== UI ===================== */
 
   return (
-    <div
-      style={{
-        width: 340,
-        height: "100vh",
-        position: "fixed",
-        right: 0,
-        top: 0,
-        background: "#f8f9fa",
-        borderLeft: "1px solid #ddd",
-        padding: 16,
-        overflowY: "auto",
-      }}
-    >
-      {!seat ? (
-        <p>Select a seat</p>
-      ) : (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <h3>Seat {seat.seatCode}</h3>
-            <button onClick={onClose}>✕</button>
+    <>
+      <div
+        style={{
+          width: 340,
+          padding: 20,
+          borderLeft: "1px solid var(--border-color)",
+          background: "var(--panel-bg)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          transition: "all 0.25s ease",
+        }}
+      >
+        {/* HEADER */}
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <h3 style={{ fontWeight: 600 }}>{seat.seatCode}</h3>
+          <button onClick={onClose}>✕</button>
+        </div>
+
+        {/* STATUS */}
+        <div>
+          <strong>Status:</strong>{" "}
+          {seat.isLocked
+            ? "Locked"
+            : occupant
+            ? "Occupied"
+            : "Available"}
+        </div>
+
+        {/* OCCUPANT */}
+        {loading ? (
+          <div>Loading...</div>
+        ) : occupant ? (
+          <div
+            style={{
+              padding: 12,
+              background: "var(--card-bg, #f3f4f6)",
+              borderRadius: 6,
+            }}
+          >
+            <div style={{ fontWeight: 600 }}>
+              {occupant.fullName}
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.7 }}>
+              {occupant.email}
+            </div>
           </div>
+        ) : (
+          <div style={{ opacity: 0.6 }}>
+            No user assigned
+          </div>
+        )}
 
-          <p><strong>Status:</strong> {seat.isOccupied ? "Occupied" : "Vacant"}</p>
-          <p><strong>Locked:</strong> {seat.isLocked ? "Yes" : "No"}</p>
+        {/* ACTIONS */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* LOCK */}
+          <button
+            onClick={handleToggleLock}
+            disabled={actionLoading}
+            style={{
+              padding: 10,
+              background: seat.isLocked ? "#16a34a" : "#111827",
+              color: "#fff",
+              borderRadius: 6,
+              opacity: actionLoading ? 0.6 : 1,
+            }}
+          >
+            {actionLoading
+              ? "Processing..."
+              : seat.isLocked
+              ? "Unlock Seat"
+              : "Lock Seat"}
+          </button>
 
-          <hr style={{ margin: "16px 0" }} />
-          <h4>Seat History</h4>
-          <SeatAuditTable seatId={seat.id} />
-
-          {ctx?.canReassign &&
-            moveFromSeat &&
-            moveFromSeat.id !== seat.id &&
-            moveFromSeat.assignedUser && (
-              <button
-                onClick={() => handleMoveSeat()}
-                disabled={loading}
-                style={{ marginTop: 12 }}
-              >
-                Move {moveFromSeat.assignedUser.fullName} here
-              </button>
-            )}
-
-          {(ctx?.canLock || ctx?.canUnlock) && (
+          {/* UNASSIGN */}
+          {occupant && (
             <button
-              onClick={handleToggleLock}
-              disabled={loading}
-              style={{ marginTop: 12 }}
+              onClick={() => setConfirmUnassign(true)}
+              disabled={actionLoading}
+              style={{
+                padding: 10,
+                background: "#dc2626",
+                color: "#fff",
+                borderRadius: 6,
+                opacity: actionLoading ? 0.6 : 1,
+              }}
             >
-              {seat.isLocked ? "Unlock Seat" : "Lock Seat"}
+              Unassign User
             </button>
           )}
+        </div>
 
-          {ctx?.canUnassignSelf && (
-            <button
-              onClick={handleUnassign}
-              disabled={loading}
-              style={{ marginTop: 12 }}
+        {/* USER SEARCH + ASSIGN */}
+        {!seat.isLocked && (
+          <>
+            <hr />
+
+            <input
+              placeholder="Search users..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{
+                padding: 8,
+                borderRadius: 6,
+                border: "1px solid var(--border-color)",
+                background: "var(--input-bg, transparent)",
+              }}
+            />
+
+            <div
+              style={{
+                maxHeight: 160,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
             >
-              Unassign
-            </button>
-          )}
+              {filteredUsers.map((user) => (
+                <div
+                  key={user.id}
+                  onClick={() => handleAssign(user)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    background:
+                      occupant?.id === user.id
+                        ? "#2563eb"
+                        : "transparent",
+                    color:
+                      occupant?.id === user.id
+                        ? "#fff"
+                        : "inherit",
+                  }}
+                >
+                  {user.fullName}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
-          {ctx?.canAssignSelf && (
-            <>
-              <select
-                value={selectedUserId ?? ""}
-                disabled={loading}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                style={{ width: "100%", marginTop: 12 }}
-              >
-                <option value="">-- Select user --</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.fullName}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={() => handleAssign()}
-                disabled={loading}
-                style={{ marginTop: 12 }}
-              >
-                Assign Seat
+      {/* CONFIRM MODAL */}
+      {confirmUnassign && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--panel-bg)",
+              padding: 24,
+              borderRadius: 8,
+              width: 300,
+            }}
+          >
+            <h4>Unassign User?</h4>
+            <p style={{ marginTop: 8 }}>
+              This will remove the user from this seat.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+                marginTop: 20,
+              }}
+            >
+              <button onClick={() => setConfirmUnassign(false)}>
+                Cancel
               </button>
-            </>
-          )}
-        </>
+              <button
+                onClick={() => {
+                  setConfirmUnassign(false);
+                  handleUnassign();
+                }}
+                style={{
+                  background: "#dc2626",
+                  color: "#fff",
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }

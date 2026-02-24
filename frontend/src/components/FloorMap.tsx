@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import { SeatDetailsPanel } from "./SeatDetailsPanel";
+import SeatDetailsPanel from "./SeatDetailsPanel";
 import { useParams } from "react-router-dom";
 import { runOptimistic } from "@utils/optimistic";
 import api from "../api/http";
@@ -38,7 +38,6 @@ export function FloorMap() {
   const [floor, setFloor] = useState<Floor | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<Seat | null>(null);
   const [moveFromSeat, setMoveFromSeat] = useState<Seat | null>(null);
-
   const [selectedSeatIds, setSelectedSeatIds] = useState<Set<string>>(new Set());
 
   const { floorId } = useParams<{ floorId: string }>();
@@ -46,15 +45,15 @@ export function FloorMap() {
   /* ===================== FETCH FLOOR MAP ===================== */
 
   function refreshFloorMap() {
-  if (!floorId) return;
+    if (!floorId) return;
 
-  api<{ floor: Floor; seats: Seat[] }>(`/floors/${floorId}/map`)
-    .then(data => {
-      setFloor(data.floor);
-      setSeats(data.seats);
-    })
-    .catch(() => toast.error("Failed to load floor map"));
-}
+    api<{ floor: Floor; seats: Seat[] }>(`/floors/${floorId}/map`)
+      .then((data) => {
+        setFloor(data.floor);
+        setSeats(data.seats);
+      })
+      .catch(() => toast.error("Failed to load floor map"));
+  }
 
   useEffect(() => {
     refreshFloorMap();
@@ -67,8 +66,8 @@ export function FloorMap() {
     seatId: string,
     assignedUser: AssignedUser | null
   ) {
-    setSeats(prev =>
-      prev.map(seat =>
+    setSeats((prev) =>
+      prev.map((seat) =>
         seat.id === seatId
           ? {
               ...seat,
@@ -81,8 +80,8 @@ export function FloorMap() {
   }
 
   function optimisticLockUpdate(seatId: string, isLocked: boolean) {
-    setSeats(prev =>
-      prev.map(seat =>
+    setSeats((prev) =>
+      prev.map((seat) =>
         seat.id === seatId ? { ...seat, isLocked } : seat
       )
     );
@@ -91,7 +90,7 @@ export function FloorMap() {
   /* ===================== BULK SELECTION ===================== */
 
   function toggleSeatSelection(seatId: string) {
-    setSelectedSeatIds(prev => {
+    setSelectedSeatIds((prev) => {
       const next = new Set(prev);
       if (next.has(seatId)) {
         next.delete(seatId);
@@ -123,7 +122,7 @@ export function FloorMap() {
       setSelectedSeatIds(new Set());
       refreshFloorMap();
     } catch {
-      // error handled by toast
+      // toast handled internally
     }
   }
 
@@ -149,7 +148,7 @@ export function FloorMap() {
           border: "1px solid #ccc",
         }}
       >
-        {seats.map(seat => {
+        {seats.map((seat) => {
           const isSelected = selectedSeatIds.has(seat.id);
 
           const backgroundColor = seat.isLocked
@@ -199,17 +198,26 @@ export function FloorMap() {
       </div>
 
       {/* ================= SIDE PANEL ================= */}
-      <SeatDetailsPanel
-        seat={selectedSeat}
-        moveFromSeat={moveFromSeat}
-        onClose={() => {
-          setSelectedSeat(null);
-          setMoveFromSeat(null);
+      <div
+        style={{
+          transition: "all 0.25s ease",
+          transform: selectedSeat ? "translateX(0)" : "translateX(100%)",
         }}
-        onUpdated={refreshFloorMap}
-        onOptimisticUpdate={optimisticUpdateSeat}
-        onOptimisticLockUpdate={optimisticLockUpdate}
-      />
+      >
+        {selectedSeat && (
+          <SeatDetailsPanel
+            seat={selectedSeat}
+            moveFromSeat={moveFromSeat}
+            onClose={() => {
+              setSelectedSeat(null);
+              setMoveFromSeat(null);
+            }}
+            onRefresh={refreshFloorMap}
+            onOptimisticUpdate={optimisticUpdateSeat}
+            onOptimisticLockUpdate={optimisticLockUpdate}
+          />
+        )}
+      </div>
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedSeatIds.size > 0 && (
