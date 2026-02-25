@@ -98,11 +98,14 @@ model SeatAssignment {
   assignedAt   DateTime  @default(now())
   unassignedAt DateTime?
   isActive     Boolean   @default(true)
+
   seat         Seat      @relation(fields: [seatId], references: [id], onDelete: Cascade)
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([seatId])
+  // 🔐 Performance + integrity
+  @@index([userId, isActive])
+  @@index([seatId, isActive])
+  @@index([assignedAt])
 }
 
 model SeatAuditLog {
@@ -117,9 +120,15 @@ model SeatAuditLog {
   isLockedBefore Boolean?
   isLockedAfter  Boolean?
   createdAt      DateTime        @default(now())
+
   actor          User            @relation("SeatAuditActor", fields: [actorId], references: [id], onDelete: Cascade)
   seat           Seat            @relation(fields: [seatId], references: [id], onDelete: Cascade)
   user           User?           @relation("AuditUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  // 🔐 Analytics acceleration
+  @@index([seatId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
 }
 
 model ExportLog {
@@ -133,6 +142,7 @@ model ExportLog {
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId, exportType])
+  @@index([organizationId, exportedAt])
 }
 
 enum OrgRole {

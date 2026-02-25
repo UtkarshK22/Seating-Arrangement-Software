@@ -2,6 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import 'reflect-metadata';
+import helmet from 'helmet';
+import * as cors from 'cors';
+import { Logger } from 'nestjs-pino';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -40,6 +43,14 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.useLogger(app.get(Logger));
+  app.use(helmet());
+
+  app.enableCors({
+    origin: ['https://yourfrontend.com'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    credentials: true,
+  });
 
   // ✅ ROOT ROUTE FOR RAILWAY HEALTHCHECK
   const server = app.getHttpAdapter().getInstance();

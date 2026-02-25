@@ -8,44 +8,63 @@ import { PrismaService } from '../prisma/prisma.service';
 export class FloorsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // =========================
+  // UPDATE LAYOUT (ORG SAFE)
+  // =========================
   async updateLayout(
-  floorId: string,
-  seats: { id: string; x: number; y: number }[]
-) {
-  const seatIds = seats.map((s) => s.id);
-
-  const existingSeats = await this.prisma.seat.findMany({
-    where: {
-      id: { in: seatIds },
-      floorId,
-    },
-  });
-
-  if (existingSeats.length !== seats.length) {
-    throw new Error('Some seats not found on this floor');
-  }
-
-  const updates = seats.map((seat) =>
-    this.prisma.seat.update({
-      where: { id: seat.id },
-      data: {
-        x: seat.x,
-        y: seat.y,
+    organizationId: string,
+    floorId: string,
+    seats: { id: string; x: number; y: number }[],
+  ) {
+    // 1️⃣ Validate floor belongs to organization
+    const floor = await this.prisma.floor.findFirst({
+      where: {
+        id: floorId,
+        building: {
+          organizationId,
+        },
       },
-    })
-  );
+    });
 
-  await this.prisma.$transaction(updates);
+    if (!floor) {
+      throw new ForbiddenException('Access denied');
+    }
 
-  return { message: 'Layout updated successfully' };
-}
+    const seatIds = seats.map((s) => s.id);
+
+    // 2️⃣ Validate seats belong to this floor
+    const existingSeats = await this.prisma.seat.findMany({
+      where: {
+        id: { in: seatIds },
+        floorId,
+      },
+    });
+
+    if (existingSeats.length !== seats.length) {
+      throw new ForbiddenException(
+        'Some seats not found on this floor',
+      );
+    }
+
+    const updates = seats.map((seat) =>
+      this.prisma.seat.update({
+        where: { id: seat.id },
+        data: {
+          x: seat.x,
+          y: seat.y,
+        },
+      }),
+    );
+
+    await this.prisma.$transaction(updates);
+
+    return { message: 'Layout updated successfully' };
+  }
 
   // =========================
   // GET ALL FLOORS (ORG SAFE)
   // =========================
-  async getFloors(
-    organizationId: string,
-  ) {
+  async getFloors(organizationId: string) {
     return this.prisma.floor.findMany({
       where: {
         building: {

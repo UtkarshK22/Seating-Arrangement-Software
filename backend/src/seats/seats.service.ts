@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { SeatAuditService } from "../seat-audit/seat-audit.service";
 import { SeatAuditAction } from "@prisma/client";
@@ -11,36 +11,37 @@ export class SeatsService {
     private seatAudit: SeatAuditService,
   ) {}
 
-  // ---------- CREATE SEAT ----------
-  
+  // ---------- CREATE SEAT (ORG SAFE) ----------
   async createSeat(
-  floorId: string,
-  organizationId: string,
-  dto: CreateSeatDto,
-) {
-  // Validate floor belongs to org
-  const floor = await this.prisma.floor.findFirst({
-    where: {
-      id: floorId,
-    },
-  });
+    floorId: string,
+    organizationId: string,
+    dto: CreateSeatDto,
+  ) {
+    const floor = await this.prisma.floor.findFirst({
+      where: {
+        id: floorId,
+        building: {
+          organizationId,
+        },
+      },
+    });
 
-  if (!floor) {
-    throw new Error('Floor not found');
+    if (!floor) {
+      throw new ForbiddenException("Floor not found or access denied");
+    }
+
+    return this.prisma.seat.create({
+      data: {
+        seatCode: dto.seatCode,
+        x: dto.x,
+        y: dto.y,
+        floorId,
+        isLocked: false,
+      },
+    });
   }
 
-  return this.prisma.seat.create({
-    data: {
-      seatCode: dto.seatCode,
-      x: dto.x,
-      y: dto.y,
-      floorId,
-      isLocked: false,
-      // isOccupied: false,
-    },
-  });
-}
-
+  // ---------- LEGACY CREATE (HARDENED) ----------
   async create(data: {
     seatCode: string;
     x: number;
@@ -48,7 +49,6 @@ export class SeatsService {
     floorId: string;
     isLocked?: boolean;
   }) {
-    // 1. Validate floor exists
     const floor = await this.prisma.floor.findUnique({
       where: { id: data.floorId },
     });
@@ -57,7 +57,6 @@ export class SeatsService {
       throw new BadRequestException("Floor not found");
     }
 
-    // 2. Ensure seatCode is unique per floor
     const existingSeat = await this.prisma.seat.findFirst({
       where: {
         floorId: data.floorId,
@@ -71,7 +70,6 @@ export class SeatsService {
       );
     }
 
-    // 3. Create seat
     return this.prisma.seat.create({
       data: {
         seatCode: data.seatCode,
@@ -83,7 +81,7 @@ export class SeatsService {
     });
   }
 
-  // ---------- STEP 2: GET LOGGED-IN USER SEAT ----------
+  // ---------- GET MY ACTIVE SEAT ----------
   async getMyActiveSeat(userId: string) {
     const assignment = await this.prisma.seatAssignment.findFirst({
       where: {
@@ -93,7 +91,11 @@ export class SeatsService {
       include: {
         seat: {
           include: {
-            floor: true,
+            floor: {
+              include: {
+                building: true,
+              },
+            },
           },
         },
       },
@@ -120,22 +122,30 @@ export class SeatsService {
     };
   }
 
-  // ---------- LOCK / UNLOCK SEAT (PHASE 2) ----------
+  // ---------- LOCK / UNLOCK SEAT (ORG SAFE) ----------
   async toggleSeatLock(
     actorUserId: string,
+    organizationId: string,
     seatId: string,
     isLocked: boolean,
   ) {
-    const seat = await this.prisma.seat.findUnique({
-      where: { id: seatId },
+    const seat = await this.prisma.seat.findFirst({
+      where: {
+        id: seatId,
+        floor: {
+          building: {
+            organizationId,
+          },
+        },
+      },
     });
 
     if (!seat) {
-      throw new BadRequestException("Seat not found");
+      throw new ForbiddenException("Seat not found or access denied");
     }
 
     if (seat.isLocked === isLocked) {
-      return seat; // no-op
+      return seat;
     }
 
     const updatedSeat = await this.prisma.seat.update({
@@ -143,7 +153,6 @@ export class SeatsService {
       data: { isLocked },
     });
 
-    // ✅ AUDIT LOG
     await this.seatAudit.log({
       seatId: updatedSeat.id,
       seatCode: updatedSeat.seatCode,

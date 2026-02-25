@@ -8,9 +8,12 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { RolesGuard } from './guards/roles.guard';
 
+import { PrismaModule } from '../prisma/prisma.module'; // ✅ ADD THIS
+
 @Module({
   imports: [
     ConfigModule,
+    PrismaModule, // ✅ REQUIRED for JwtStrategy
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -25,6 +28,7 @@ import { RolesGuard } from './guards/roles.guard';
   providers: [
     AuthService,
     JwtStrategy,
+    RolesGuard, // ✅ if not globally registered elsewhere
   ],
   exports: [JwtModule],
 })

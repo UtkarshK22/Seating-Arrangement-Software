@@ -1,9 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SeatAuditAction, ExportType } from '@prisma/client';
 import { ExportLogsService } from '../export-logs/export-logs.service';
-import { ConflictException } from '@nestjs/common';
-
 
 @Injectable()
 export class SeatAuditService {
@@ -11,6 +14,10 @@ export class SeatAuditService {
     private readonly prisma: PrismaService,
     private readonly exportLogsService: ExportLogsService,
   ) {}
+
+  /* =========================================================
+     CREATE AUDIT LOG (INTERNAL SAFE)
+  ========================================================= */
 
   async log(data: {
     seatId: string;
@@ -23,24 +30,46 @@ export class SeatAuditService {
     isLockedBefore?: boolean;
     isLockedAfter?: boolean;
   }) {
+    // Optional validation: ensure seat exists
+    const seat = await this.prisma.seat.findUnique({
+      where: { id: data.seatId },
+      select: { id: true },
+    });
+
+    if (!seat) {
+      throw new NotFoundException('Seat not found for audit log');
+    }
+
     await this.prisma.seatAuditLog.create({ data });
   }
 
+  /* =========================================================
+     GET AUDIT BY SEAT (ORG SAFE)
+  ========================================================= */
+
   async getBySeat(seatId: string, organizationId: string) {
-    return this.prisma.seatAuditLog.findMany({
+    const seat = await this.prisma.seat.findFirst({
       where: {
-        seatId,
-        seat: {
-          floor: {
-            building: {
-              organizationId,
-            },
-          },
+        id: seatId,
+        floor: {
+          building: { organizationId },
         },
       },
+    });
+
+    if (!seat) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    return this.prisma.seatAuditLog.findMany({
+      where: { seatId },
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /* =========================================================
+     GET FLOOR AUDIT (ORG SAFE + PAGINATED)
+  ========================================================= */
 
   async getAuditForFloor(
     floorId: string,
@@ -50,6 +79,17 @@ export class SeatAuditService {
     from?: string,
     to?: string,
   ) {
+    const floor = await this.prisma.floor.findFirst({
+      where: {
+        id: floorId,
+        building: { organizationId },
+      },
+    });
+
+    if (!floor) {
+      throw new ForbiddenException('Access denied');
+    }
+
     const skip = (page - 1) * limit;
 
     const createdAtFilter =
@@ -63,12 +103,7 @@ export class SeatAuditService {
         : {};
 
     const where = {
-      seat: {
-        floorId,
-        building: {
-          organizationId,
-        },
-      },
+      seat: { floorId },
       ...createdAtFilter,
     };
 
@@ -96,6 +131,10 @@ export class SeatAuditService {
     };
   }
 
+  /* =========================================================
+     EXPORT CSV (ORG SAFE + COOLDOWN FIRST)
+  ========================================================= */
+
   async exportAuditCsv(
     floorId: string,
     organizationId: string,
@@ -103,6 +142,28 @@ export class SeatAuditService {
     from?: string,
     to?: string,
   ) {
+    // 🔐 Validate floor first
+    const floor = await this.prisma.floor.findFirst({
+      where: {
+        id: floorId,
+        building: { organizationId },
+      },
+    });
+
+    if (!floor) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // 🔐 Check cooldown BEFORE heavy DB query
+    try {
+      await this.exportLogsService.assertCooldownOrThrow(
+        organizationId,
+        ExportType.SEAT_ALLOCATION,
+      );
+    } catch (e) {
+      throw new ConflictException(e.message);
+    }
+
     const createdAtFilter =
       from || to
         ? {
@@ -115,13 +176,7 @@ export class SeatAuditService {
 
     const logs = await this.prisma.seatAuditLog.findMany({
       where: {
-        seat: {
-          floor: {
-            building: {
-              organizationId,
-            },
-          },
-        },
+        seat: { floorId },
         ...createdAtFilter,
       },
       include: {
@@ -152,24 +207,15 @@ export class SeatAuditService {
 
     const csv = [header, ...rows]
       .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+        row.map((cell) =>
+          `"${String(cell).replace(/"/g, '""')}"`,
+        ).join(','),
       )
       .join('\n');
 
-    // ✅ LOG EXPORT ONLY AFTER CSV IS SUCCESSFULLY BUILT
-    // await this.exportLogsService.logExport(
-    //   organizationId,
-    //   userId,
-    //   ExportType.SEAT_ALLOCATION,
-    // );
-    try {
-      await this.exportLogsService.assertCooldownOrThrow(
-        organizationId,
-        ExportType.SEAT_ALLOCATION,
-      );
-    } catch (e) {
-      throw new ConflictException(e.message);
-    }
+// Cooldown already enforced earlier
+// Export logging handled by ExportLogsService
+
     return csv;
   }
 }

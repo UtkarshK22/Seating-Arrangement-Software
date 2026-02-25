@@ -8,39 +8,34 @@ export class AnalyticsService {
   /* ===================== OVERALL UTILIZATION ===================== */
 
   async getSeatUtilization(organizationId: string) {
-    const totalSeats = await this.prisma.seat.count({
-      where: {
-        floor: {
-          building: {
-            organizationId,
-          },
-        },
-      },
-    });
-
-    const lockedSeats = await this.prisma.seat.count({
-      where: {
-        isLocked: true,
-        floor: {
-          building: {
-            organizationId,
-          },
-        },
-      },
-    });
-
-    const occupiedSeats = await this.prisma.seatAssignment.count({
-      where: {
-        isActive: true,
-        seat: {
-          floor: {
-            building: {
-              organizationId,
+    const [totalSeats, lockedSeats, occupiedSeats] =
+      await this.prisma.$transaction([
+        this.prisma.seat.count({
+          where: {
+            floor: {
+              building: { organizationId },
             },
           },
-        },
-      },
-    });
+        }),
+        this.prisma.seat.count({
+          where: {
+            isLocked: true,
+            floor: {
+              building: { organizationId },
+            },
+          },
+        }),
+        this.prisma.seatAssignment.count({
+          where: {
+            isActive: true,
+            seat: {
+              floor: {
+                building: { organizationId },
+              },
+            },
+          },
+        }),
+      ]);
 
     const availableSeats =
       totalSeats - occupiedSeats - lockedSeats;
@@ -64,61 +59,49 @@ export class AnalyticsService {
   async getFloorUtilization(organizationId: string) {
     const floors = await this.prisma.floor.findMany({
       where: {
-        building: {
-          organizationId,
+        building: { organizationId },
+      },
+      include: {
+        seats: {
+          include: {
+            assignments: {
+              where: { isActive: true },
+              select: { id: true },
+            },
+          },
         },
       },
-      select: {
-        id: true,
-        name: true,
-      },
+      orderBy: { name: 'asc' },
     });
 
-    const results = await Promise.all(
-      floors.map(async (floor) => {
-        const totalSeats = await this.prisma.seat.count({
-          where: {
-            floorId: floor.id,
-          },
-        });
+    return floors.map((floor) => {
+      const totalSeats = floor.seats.length;
 
-        const lockedSeats = await this.prisma.seat.count({
-          where: {
-            floorId: floor.id,
-            isLocked: true,
-          },
-        });
+      const lockedSeats = floor.seats.filter(
+        (seat) => seat.isLocked,
+      ).length;
 
-        const occupiedSeats =
-          await this.prisma.seatAssignment.count({
-            where: {
-              isActive: true,
-              seat: {
-                floorId: floor.id,
-              },
-            },
-          });
+      const occupiedSeats = floor.seats.filter(
+        (seat) => seat.assignments.length > 0,
+      ).length;
 
-        const availableSeats =
-          totalSeats - occupiedSeats - lockedSeats;
+      const availableSeats =
+        totalSeats - occupiedSeats - lockedSeats;
 
-        return {
-          floorId: floor.id,
-          floorName: floor.name,
-          totalSeats,
-          occupiedSeats,
-          availableSeats,
-          lockedSeats,
-          utilizationPercent:
-            totalSeats === 0
-              ? 0
-              : Math.round(
-                  (occupiedSeats / totalSeats) * 100,
-                ),
-        };
-      }),
-    );
-
-    return results;
+      return {
+        floorId: floor.id,
+        floorName: floor.name,
+        totalSeats,
+        occupiedSeats,
+        availableSeats,
+        lockedSeats,
+        utilizationPercent:
+          totalSeats === 0
+            ? 0
+            : Math.round(
+                (occupiedSeats / totalSeats) * 100,
+              ),
+      };
+    });
   }
 }

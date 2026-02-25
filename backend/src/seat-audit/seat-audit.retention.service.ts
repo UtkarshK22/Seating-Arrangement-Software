@@ -22,25 +22,39 @@ export class SeatAuditRetentionService {
     });
   }
 
-  /**
-   * 🔁 CRON: runs daily at 03:00 AM
-   */
+  /* =========================================================
+     CRON — PROCESS ALL ORGANIZATIONS SAFELY
+  ========================================================= */
+
   @Cron('0 3 * * *')
   async exportAndCleanupOldAuditLogs() {
-    return this.exportAndCleanup();
+    const organizations = await this.prisma.organization.findMany({
+      select: { id: true },
+    });
+
+    const results = [];
+
+    for (const org of organizations) {
+      const result = await this.exportAndCleanup(org.id);
+      results.push({ organizationId: org.id, ...result });
+    }
+
+    return results;
   }
 
-  /**
-   * 🔘 Manual trigger (used by controller)
-   */
-  async cleanupOldAuditLogs() {
-    return this.exportAndCleanup();
+  /* =========================================================
+     MANUAL — PROCESS SINGLE ORGANIZATION
+  ========================================================= */
+
+  async cleanupOldAuditLogs(organizationId: string) {
+    return this.exportAndCleanup(organizationId);
   }
 
-  /**
-   * 🔧 Core logic (shared by cron + manual trigger)
-   */
-  private async exportAndCleanup() {
+  /* =========================================================
+     CORE LOGIC — PER ORGANIZATION
+  ========================================================= */
+
+  private async exportAndCleanup(organizationId: string) {
     const retentionDays = Number(
       this.config.get('AUDIT_RETENTION_DAYS') ?? 90,
     );
@@ -60,9 +74,17 @@ export class SeatAuditRetentionService {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
+    // 🔐 Only logs belonging to this organization
     const logs = await this.prisma.seatAuditLog.findMany({
       where: {
         createdAt: { lt: cutoffDate },
+        seat: {
+          floor: {
+            building: {
+              organizationId,
+            },
+          },
+        },
       },
       include: {
         actor: { select: { fullName: true } },
@@ -71,30 +93,29 @@ export class SeatAuditRetentionService {
     });
 
     if (!logs.length) {
-      this.logger.log('No audit logs eligible for export/deletion');
       return {
         dryRun,
         cutoffDate,
-        wouldExport: 0,
-        wouldDelete: 0,
+        exported: 0,
+        deleted: 0,
       };
     }
 
-    // ---------------- DRY RUN ----------------
     if (dryRun) {
       this.logger.warn(
-        `[DRY-RUN] ${logs.length} audit logs would be exported and deleted`,
+        `[DRY-RUN] Org ${organizationId} — ${logs.length} logs would be exported & deleted`,
       );
 
       return {
         dryRun: true,
         cutoffDate,
-        wouldExport: logs.length,
-        wouldDelete: logs.length,
+        exported: logs.length,
+        deleted: logs.length,
       };
     }
 
-    // ---------------- CSV ----------------
+    /* ================= CSV BUILD ================= */
+
     const header = [
       'Action',
       'Seat Code',
@@ -115,13 +136,17 @@ export class SeatAuditRetentionService {
 
     const csv = [header, ...rows]
       .map((row) =>
-        row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','),
+        row.map((c) =>
+          `"${String(c).replace(/"/g, '""')}"`,
+        ).join(','),
       )
       .join('\n');
 
-    // ---------------- S3 UPLOAD ----------------
+    /* ================= S3 UPLOAD ================= */
+
     const datePart = cutoffDate.toISOString().split('T')[0];
-    const objectKey = `${prefix}/${datePart}/seat-audit-backup-${datePart}.csv`;
+
+    const objectKey = `${prefix}/${organizationId}/${datePart}/seat-audit-backup-${datePart}.csv`;
 
     await this.s3.send(
       new PutObjectCommand({
@@ -133,16 +158,26 @@ export class SeatAuditRetentionService {
     );
 
     this.logger.log(
-      `Audit logs exported to s3://${bucket}/${objectKey} (${logs.length} rows)`,
+      `Org ${organizationId} — exported ${logs.length} logs to s3://${bucket}/${objectKey}`,
     );
 
-    // ---------------- DELETE AFTER EXPORT ----------------
+    /* ================= DELETE ================= */
+
     const deleted = await this.prisma.seatAuditLog.deleteMany({
-      where: { createdAt: { lt: cutoffDate } },
+      where: {
+        createdAt: { lt: cutoffDate },
+        seat: {
+          floor: {
+            building: {
+              organizationId,
+            },
+          },
+        },
+      },
     });
 
     this.logger.log(
-      `Audit cleanup complete: deleted ${deleted.count} records`,
+      `Org ${organizationId} — deleted ${deleted.count} logs`,
     );
 
     return {

@@ -1,4 +1,8 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExportType } from '@prisma/client';
 import { EXPORT_COOLDOWN_MS } from './export-logs.constants';
@@ -28,9 +32,39 @@ export class ExportLogsService {
     });
   }
 
-  /* ===================== EXPORT HISTORY ===================== */
+  /* =========================================================
+     INTERNAL VALIDATION
+  ========================================================= */
 
-  async getExportHistory(organizationId: string) {
+  private async assertMembership(
+    organizationId: string,
+    userId: string,
+  ) {
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: {
+        organizationId,
+        userId,
+        isActive: true,
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException(
+        'User not part of this organization',
+      );
+    }
+  }
+
+  /* =========================================================
+     EXPORT HISTORY (ORG SAFE)
+  ========================================================= */
+
+  async getExportHistory(
+    organizationId: string,
+    userId: string,
+  ) {
+    await this.assertMembership(organizationId, userId);
+
     return {
       data: await this.prisma.exportLog.findMany({
         where: { organizationId },
@@ -58,7 +92,9 @@ export class ExportLogsService {
     });
   }
 
-  /* ===================== SEAT AUDIT EXPORT ===================== */
+  /* =========================================================
+     SEAT AUDIT EXPORT (FULLY SAFE)
+  ========================================================= */
 
   async exportSeatAudit(
     organizationId: string,
@@ -68,6 +104,10 @@ export class ExportLogsService {
       throw new ForbiddenException('Missing userId');
     }
 
+    // 🔐 Validate membership
+    await this.assertMembership(organizationId, userId);
+
+    // 🔐 Cooldown before heavy DB query
     await this.assertCooldownOrThrow(
       organizationId,
       ExportType.SEAT_AUDIT,
@@ -99,7 +139,6 @@ export class ExportLogsService {
 
     const csv = seatAuditToCSV(rows);
 
-    // ✅ SINGLE source of truth
     const exportedAt = new Date();
     const s3Key = `seat-audit/${organizationId}/${exportedAt.getTime()}.csv`;
 
@@ -114,13 +153,12 @@ export class ExportLogsService {
 
     await this.prisma.exportLog.create({
       data: {
-        exportType: ExportType.SEAT_AUDIT,exportedAt,
+        exportType: ExportType.SEAT_AUDIT,
+        exportedAt,
         s3Key,
-        
         organization: {
           connect: { id: organizationId },
         },
-        
         exportedBy: {
           connect: { id: userId },
         },
@@ -134,7 +172,9 @@ export class ExportLogsService {
     };
   }
 
-  /* ===================== DOWNLOAD ===================== */
+  /* =========================================================
+     DOWNLOAD LAST EXPORT (SAFE)
+  ========================================================= */
 
   async getSeatAuditDownloadUrl(
     organizationId: string,
@@ -144,10 +184,8 @@ export class ExportLogsService {
       throw new ForbiddenException('Missing userId');
     }
 
-    await this.assertCooldownOrThrow(
-      organizationId,
-      ExportType.SEAT_AUDIT,
-    );
+    // 🔐 Validate membership
+    await this.assertMembership(organizationId, userId);
 
     const last = await this.getLastExport(
       organizationId,
@@ -155,12 +193,12 @@ export class ExportLogsService {
     );
 
     if (!last) {
-      throw new ForbiddenException('No export available');
+      throw new NotFoundException('No export available');
     }
 
     const command = new GetObjectCommand({
       Bucket: this.config.get<string>('AUDIT_EXPORT_S3_BUCKET'),
-      Key: last.s3Key, // ✅ DB is source of truth
+      Key: last.s3Key,
     });
 
     const url = await getSignedUrl(this.s3, command, {
@@ -170,7 +208,9 @@ export class ExportLogsService {
     return { url };
   }
 
-  /* ===================== COOLDOWN ===================== */
+  /* =========================================================
+     COOLDOWN (ORG SAFE)
+  ========================================================= */
 
   async assertCooldownOrThrow(
     organizationId: string,

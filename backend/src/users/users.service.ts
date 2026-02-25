@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -6,34 +10,63 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  // -----------------------------
-  // Get current user (org-aware)
-  // -----------------------------
-  getMe(userId: string, organizationId: string) {
-  return this.prisma.user.findFirst({
-    where: {
-      id: userId,
-      memberships: {
-        some: {
-          organizationId,
-          isActive: true,
+  /* =========================
+     GET CURRENT USER (ORG SAFE)
+  ========================= */
+
+  async getMe(userId: string, organizationId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        memberships: {
+          some: {
+            organizationId,
+            isActive: true,
+          },
         },
       },
-    },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      createdAt: true,
-    },
-  });
-}
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        createdAt: true,
+      },
+    });
 
-  // -----------------------------
-  // Update user profile (NO ROLE)
-  // -----------------------------
-  updateMe(userId: string, dto: UpdateUserDto) {
-    return this.prisma.user.update({
+    if (!user) {
+      throw new ForbiddenException(
+        'User not part of this organization',
+      );
+    }
+
+    return user;
+  }
+
+  /* =========================
+     UPDATE USER PROFILE (ORG SAFE)
+  ========================= */
+
+  async updateMe(
+    userId: string,
+    organizationId: string,
+    dto: UpdateUserDto,
+  ) {
+    // 🔐 Validate membership first
+    const membership = await this.prisma.organizationMember.findFirst({
+      where: {
+        userId,
+        organizationId,
+        isActive: true,
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException(
+        'Access denied to this organization',
+      );
+    }
+
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         fullName: dto.fullName,
@@ -45,6 +78,11 @@ export class UsersService {
         createdAt: true,
       },
     });
+
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+
+    return updated;
   }
 }
-

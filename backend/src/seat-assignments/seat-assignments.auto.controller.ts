@@ -29,6 +29,7 @@ export class SeatAssignmentsAutoController {
     const actorUserId = req.user.sub;
 
     return this.seatAssignmentsService.autoAssignSmart(
+      req.user.userId,
       actorUserId,
       dto,
     );
