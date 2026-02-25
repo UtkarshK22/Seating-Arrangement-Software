@@ -6,7 +6,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { Roles } from "../auth/decorators/roles.decorator";
-import { Org } from "../common/decorators/org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { SeatAssignmentsService } from "./seat-assignments.service";
@@ -20,30 +19,18 @@ export class SeatAssignmentsAutoController {
     private readonly seatAssignmentsService: SeatAssignmentsService,
   ) {}
 
-  @Throttle({default: {limit: 10,ttl: 60,},})
+  @Throttle({ default: { limit: 10, ttl: 60 } })
   @Post("auto-assign")
   @Roles("OWNER", "ADMIN", "HR")
   async autoAssign(
     @Req() req: any,
-    @Body("seatIds") seatIds: string[],
-    @Org() organizationId: string,
+    @Body() dto: AutoAssignDto,
   ) {
     const actorUserId = req.user.sub;
 
-    return this.seatAssignmentsService.autoAssignSeats(
+    return this.seatAssignmentsService.autoAssignSmart(
       actorUserId,
-      seatIds,
-      organizationId,
+      dto,
     );
   }
-  @Post("auto-assign")
-  async autoAssign(
-    @Req() req,
-    @Body() dto: AutoAssignDto,
-) {
-  return this.seatAssignmentsService.autoAssignSmart(
-    req.user.id,
-    dto,
-  );
-}
 }

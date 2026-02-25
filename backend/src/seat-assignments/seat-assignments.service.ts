@@ -257,20 +257,18 @@ export class SeatAssignmentsService {
      AUTO ASSIGN (STEP 4 — BULK)
   ========================================================= */
 
-  async autoAssignSeats(
+  async autoAssignSmart(
   actorUserId: string,
-  seatIds: string[],
-  organizationId: string,
+  dto: {
+    seatIds: string[];
+    userIds: string[];
+    strict?: boolean;
+  },
 ) {
+  const { seatIds, userIds, strict = false } = dto;
+
   return this.prisma.$transaction(async (tx) => {
-    const memberships = await tx.organizationMember.findMany({
-      where: { organizationId },
-      include: { user: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const users = memberships.map(m => m.user);
-
+    // 1️⃣ Fetch eligible seats with row-level protection
     const seats = await tx.seat.findMany({
       where: {
         id: { in: seatIds },
@@ -279,23 +277,113 @@ export class SeatAssignmentsService {
           none: { isActive: true },
         },
       },
-      orderBy: { seatCode: "asc" },
+      select: {
+        id: true,
+        x: true,
+        y: true,
+        seatCode: true,
+      },
     });
 
-    const count = Math.min(users.length, seats.length);
+    if (!seats.length) {
+      if (strict) {
+        throw new BadRequestException("No available seats");
+      }
+      return { assigned: [], skippedUsers: userIds };
+    }
 
-    for (let i = 0; i < count; i++) {
-      await this.assignSeat(
-        actorUserId,
-        users[i].id,
-        seats[i].id,
+    // 2️⃣ Fetch users (ensure no active seat)
+    const usersWithActiveSeat = await tx.seatAssignment.findMany({
+      where: {
+        userId: { in: userIds },
+        isActive: true,
+      },
+      select: { userId: true },
+    });
+
+    const blockedUsers = new Set(
+      usersWithActiveSeat.map((u) => u.userId),
+    );
+
+    const eligibleUsers = userIds.filter(
+      (id) => !blockedUsers.has(id),
+    );
+
+    if (strict && eligibleUsers.length !== userIds.length) {
+      throw new ConflictException(
+        "Some users already have active seats",
       );
     }
 
-    return { assigned: count };
+    if (strict && seats.length < eligibleUsers.length) {
+      throw new ConflictException(
+        "Not enough available seats",
+      );
+    }
+
+    // 3️⃣ Spatial sort (cluster by centroid)
+    const centroid = {
+      x:
+        seats.reduce((sum, s) => sum + (s.x ?? 0), 0) /
+        seats.length,
+      y:
+        seats.reduce((sum, s) => sum + (s.y ?? 0), 0) /
+        seats.length,
+    };
+
+    const sortedSeats = seats.sort((a, b) => {
+      const distA =
+        Math.pow((a.x ?? 0) - centroid.x, 2) +
+        Math.pow((a.y ?? 0) - centroid.y, 2);
+
+      const distB =
+        Math.pow((b.x ?? 0) - centroid.x, 2) +
+        Math.pow((b.y ?? 0) - centroid.y, 2);
+
+      return distA - distB;
+    });
+
+    const assignCount = Math.min(
+      eligibleUsers.length,
+      sortedSeats.length,
+    );
+
+    const assignments = [];
+
+    for (let i = 0; i < assignCount; i++) {
+      const userId = eligibleUsers[i];
+      const seat = sortedSeats[i];
+
+      const created = await tx.seatAssignment.create({
+        data: {
+          userId,
+          seatId: seat.id,
+          isActive: true,
+          assignedAt: new Date(),
+        },
+      });
+
+      await this.seatAudit.log({
+        seatId: seat.id,
+        seatCode: seat.seatCode,
+        userId,
+        actorId: actorUserId,
+        action: SeatAuditAction.ASSIGN,
+      });
+
+      assignments.push(created);
+    }
+
+    return {
+      assigned: assignments,
+      skippedUsers: userIds.filter(
+        (u) =>
+          !eligibleUsers.includes(u) ||
+          eligibleUsers.indexOf(u) >= assignCount,
+      ),
+    };
   });
 }
-
   /* =========================================================
      READ HELPERS
   ========================================================= */

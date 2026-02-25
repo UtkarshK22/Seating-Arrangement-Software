@@ -18,6 +18,17 @@ export class AnalyticsService {
       },
     });
 
+    const lockedSeats = await this.prisma.seat.count({
+      where: {
+        isLocked: true,
+        floor: {
+          building: {
+            organizationId,
+          },
+        },
+      },
+    });
+
     const occupiedSeats = await this.prisma.seatAssignment.count({
       where: {
         isActive: true,
@@ -31,7 +42,8 @@ export class AnalyticsService {
       },
     });
 
-    const availableSeats = totalSeats - occupiedSeats;
+    const availableSeats =
+      totalSeats - occupiedSeats - lockedSeats;
 
     const utilizationPercent =
       totalSeats === 0
@@ -42,11 +54,12 @@ export class AnalyticsService {
       totalSeats,
       occupiedSeats,
       availableSeats,
+      lockedSeats,
       utilizationPercent,
     };
   }
 
-  /* ===================== FLOOR-WISE UTILIZATION (NEW) ===================== */
+  /* ===================== FLOOR-WISE UTILIZATION ===================== */
 
   async getFloorUtilization(organizationId: string) {
     const floors = await this.prisma.floor.findMany({
@@ -55,33 +68,57 @@ export class AnalyticsService {
           organizationId,
         },
       },
-      include: {
-        seats: {
-          include: {
-            assignments: {
-              where: { isActive: true },
-            },
-          },
-        },
+      select: {
+        id: true,
+        name: true,
       },
     });
 
-    return floors.map((floor) => {
-      const totalSeats = floor.seats.length;
-      const occupiedSeats = floor.seats.filter(
-        (seat) => seat.assignments.length > 0,
-      ).length;
+    const results = await Promise.all(
+      floors.map(async (floor) => {
+        const totalSeats = await this.prisma.seat.count({
+          where: {
+            floorId: floor.id,
+          },
+        });
 
-      return {
-        floorId: floor.id,
-        floorName: floor.name,
-        totalSeats,
-        occupiedSeats,
-        utilizationPercent:
-          totalSeats === 0
-            ? 0
-            : Math.round((occupiedSeats / totalSeats) * 100),
-      };
-    });
+        const lockedSeats = await this.prisma.seat.count({
+          where: {
+            floorId: floor.id,
+            isLocked: true,
+          },
+        });
+
+        const occupiedSeats =
+          await this.prisma.seatAssignment.count({
+            where: {
+              isActive: true,
+              seat: {
+                floorId: floor.id,
+              },
+            },
+          });
+
+        const availableSeats =
+          totalSeats - occupiedSeats - lockedSeats;
+
+        return {
+          floorId: floor.id,
+          floorName: floor.name,
+          totalSeats,
+          occupiedSeats,
+          availableSeats,
+          lockedSeats,
+          utilizationPercent:
+            totalSeats === 0
+              ? 0
+              : Math.round(
+                  (occupiedSeats / totalSeats) * 100,
+                ),
+        };
+      }),
+    );
+
+    return results;
   }
 }

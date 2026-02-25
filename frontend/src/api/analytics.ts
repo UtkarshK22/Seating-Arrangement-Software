@@ -6,6 +6,7 @@ export type SeatUtilizationSummary = {
   totalSeats: number;
   occupiedSeats: number;
   availableSeats: number;
+  lockedSeats: number;
   utilizationPercent: number;
 };
 
@@ -14,6 +15,8 @@ export type FloorUtilization = {
   floorName: string;
   totalSeats: number;
   occupiedSeats: number;
+  availableSeats: number;
+  lockedSeats: number;
   utilizationPercent: number;
 };
 

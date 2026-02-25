@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
+import { AnalyticsPage } from "./pages/AnalyticsPage";
 import App from "./App";
 import AuditPage from "./pages/AuditPage";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -17,6 +17,7 @@ createRoot(document.getElementById("root")!).render(
     <Routes>
       {/* LOGIN */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/analytics" element={<AnalyticsPage />} />
 
       {/* ROOT → just protect, no hardcoded floor */}
       <Route

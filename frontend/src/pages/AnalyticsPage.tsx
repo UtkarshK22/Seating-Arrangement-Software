@@ -5,71 +5,87 @@ import {
   type SeatUtilizationSummary,
   type FloorUtilization,
 } from "../api/analytics";
-
+import "./AnalyticsPage.css";
 
 export function AnalyticsPage() {
-    const [summary, setSummary] = useState<SeatUtilizationSummary | null>(null);
-    const [floors, setFloors] = useState<FloorUtilization[]>([]);
-    
-    useEffect(() => {
+  const [summary, setSummary] =
+    useState<SeatUtilizationSummary | null>(null);
+  const [floors, setFloors] =
+    useState<FloorUtilization[]>([]);
+
+  useEffect(() => {
     getSeatUtilization().then(setSummary);
     getFloorUtilization().then(setFloors);
-}, []);
+  }, []);
 
-  if (!summary) return <p>Loading analytics...</p>;
+  if (!summary) {
+    return (
+      <div className="analytics-container">
+        Loading analytics...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2>Seat Utilization</h2>
+    <div className="analytics-container">
+      <h2 className="analytics-title">
+        Seat Utilization Overview
+      </h2>
 
-      <div style={{ display: "flex", gap: 16 }}>
+      <div className="analytics-stats">
         <Stat label="Total Seats" value={summary.totalSeats} />
         <Stat label="Occupied" value={summary.occupiedSeats} />
         <Stat label="Available" value={summary.availableSeats} />
-        <Stat label="Utilization" value={`${summary.utilizationPercent}%`} />
+        <Stat label="Locked" value={summary.lockedSeats} />
+        <Stat
+          label="Utilization"
+          value={`${summary.utilizationPercent}%`}
+        />
       </div>
 
-      <h3 style={{ marginTop: 32 }}>By Floor</h3>
+      <h3 className="floor-title">By Floor</h3>
 
-      {floors.map((f) => (
-        <div key={f.floorId} style={{ marginBottom: 12 }}>
-          <strong>{f.floorName}</strong>
-          <div
-            style={{
-              height: 12,
-              background: "#e5e7eb",
-              borderRadius: 6,
-              overflow: "hidden",
-              marginTop: 4,
-            }}
-          >
-            <div
-              style={{
-                width: `${f.utilizationPercent}%`,
-                height: "100%",
-                background: "#2563eb",
-              }}
-            />
+      <div className="floor-list">
+        {floors.map((f) => (
+          <div key={f.floorId} className="floor-card">
+            <div className="floor-header">
+              <strong>{f.floorName}</strong>
+              <span>{f.utilizationPercent}%</span>
+            </div>
+
+            <div className="progress-bar">
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${f.utilizationPercent}%`,
+                }}
+              />
+            </div>
+
+            <div className="floor-meta">
+              <span>Total: {f.totalSeats}</span>
+              <span>Occupied: {f.occupiedSeats}</span>
+              <span>Available: {f.availableSeats}</span>
+              <span>Locked: {f.lockedSeats}</span>
+            </div>
           </div>
-          <small>{f.utilizationPercent}% utilized</small>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
   return (
-    <div
-      style={{
-        padding: 16,
-        background: "#f8fafc",
-        borderRadius: 8,
-        minWidth: 140,
-      }}
-    >
-      <strong>{value}</strong>
-      <div>{label}</div>
+    <div className="stat-card">
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
     </div>
   );
 }
