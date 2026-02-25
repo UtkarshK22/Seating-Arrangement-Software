@@ -11,6 +11,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { SeatAssignmentsService } from "./seat-assignments.service";
 import { Throttle } from "@nestjs/throttler";
+import { AutoAssignDto } from "./dto/auto-assign.dto";
 
 @Controller("seat-assignments")
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,4 +36,14 @@ export class SeatAssignmentsAutoController {
       organizationId,
     );
   }
+  @Post("auto-assign")
+  async autoAssign(
+    @Req() req,
+    @Body() dto: AutoAssignDto,
+) {
+  return this.seatAssignmentsService.autoAssignSmart(
+    req.user.id,
+    dto,
+  );
+}
 }
