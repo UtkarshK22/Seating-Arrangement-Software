@@ -77,7 +77,8 @@ export class SeatAllocationService {
       // 4. Assign sequentially (safe)
       for (let i = 0; i < assignments; i++) {
         await this.seatAssignmentsService.assignSeat(
-          actorUserId,      // ✅ ADMIN ACTOR
+          actorUserId,      // ADMIN ACTOR
+          organizationId,  // ORG CONTEXT
           users[i].id,      // affected user
           seats[i].id,      // target seat
         );

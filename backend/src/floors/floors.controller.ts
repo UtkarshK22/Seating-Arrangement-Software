@@ -21,14 +21,14 @@ export class FloorsController {
   constructor(
     private readonly floorsService: FloorsService,
   ) {}
-
   @Put(':floorId/layout')
   @Roles('OWNER', 'ADMIN')
   async updateLayout(
+    @Org() organizationId: string,
     @Param('floorId') floorId: string,
     @Body() seats: UpdateSeatPositionDto[]
   ) {
-    return this.floorsService.updateLayout(floorId, seats);
+    return this.floorsService.updateLayout(organizationId,floorId, seats);
   }
 
   // =========================

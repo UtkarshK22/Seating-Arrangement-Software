@@ -15,7 +15,7 @@ import { SeatAllocationModule } from './seat-allocation/seat-allocation.module';
 import { SeatAuditModule } from './seat-audit/seat-audit.module';
 import { ExportLogsModule } from './export-logs/export-logs.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-
+import { LoggerModule } from 'nestjs-pino';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 
@@ -23,7 +23,19 @@ import { AppController } from './app.controller';
 
 @Module({
   controllers: [AppController],
+  
   imports: [
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport:
+        process.env.NODE_ENV !== 'production'
+        ? {
+              target: 'pino-pretty',
+
+          }
+        : undefined,
+      },
+    }),
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
 

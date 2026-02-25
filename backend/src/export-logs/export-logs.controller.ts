@@ -28,9 +28,11 @@ export class ExportLogsController {
   @Throttle({ default: { limit: 5, ttl: 60 } })
   async getExportHistory(
     @Org() organizationId: string,
+    @Req() req: any
   ) {
     return this.exportLogsService.getExportHistory(
       organizationId,
+      req.user.userId,
     );
   }
 

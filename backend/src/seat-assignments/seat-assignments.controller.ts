@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ReassignSeatDto } from './dto/reassign-seat.dto';
+import { Org } from '../common/decorators/org.decorator';
 
 @Controller('seat-assignments')
 @UseGuards(JwtAuthGuard)
@@ -25,13 +26,15 @@ export class SeatAssignmentsController {
      ========================= */
   @Post('assign')
   assignSeat(
-    @Req() req,
+    @Req() req: any,
+    @Org() organizationId: string,
     @Body('seatId') seatId: string,
   ) {
     return this.seatService.assignSeat(
-      req.user.userId,
-      req.user.userId,
-      seatId,
+      req.user.userId,        // actor
+      organizationId,         // org
+      req.user.userId,        // target user
+      seatId,                 // seat
     );
   }
 
@@ -39,10 +42,14 @@ export class SeatAssignmentsController {
      UNASSIGN SEAT (SELF)
      ========================= */
   @Post('unassign')
-  unassignSeat(@Req() req) {
-    return this.seatService.unassignSeatByUser(
-      req.user.userId,
-      req.user.userId,
+  unassignSeat(
+    @Req() req: any,
+    @Org() organizationId: string,
+  ) {
+    return this.seatService.unassignSeat(
+      req.user.userId,        // actor
+      organizationId,
+      req.user.userId,        // target user
     );
   }
 
@@ -50,9 +57,13 @@ export class SeatAssignmentsController {
      GET MY ACTIVE SEAT
      ========================= */
   @Get('me')
-  getMySeat(@Req() req) {
+  getMySeat(
+    @Req() req: any,
+    @Org() organizationId: string,
+  ) {
     return this.seatService.getActiveSeatForUser(
       req.user.userId,
+      organizationId,
     );
   }
 
@@ -60,8 +71,14 @@ export class SeatAssignmentsController {
      GET OCCUPANT OF A SEAT
      ========================= */
   @Get('seat/:seatId')
-  getSeatOccupant(@Param('seatId') seatId: string) {
-    return this.seatService.getActiveUserForSeat(seatId);
+  getSeatOccupant(
+    @Param('seatId') seatId: string,
+    @Org() organizationId: string,
+  ) {
+    return this.seatService.getActiveUserForSeat(
+      seatId,
+      organizationId,
+    );
   }
 
   /* =========================
@@ -71,11 +88,13 @@ export class SeatAssignmentsController {
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN', 'HR', 'MANAGER')
   unassignSeatBySeat(
-    @Req() req,
+    @Req() req: any,
+    @Org() organizationId: string,
     @Param('seatId') seatId: string,
   ) {
-    return this.seatService.unassignSeatBySeat(
-      req.user.userId,
+    return this.seatService.unassignSeat(
+      req.user.userId,   // actor
+      organizationId,
       seatId,
     );
   }
@@ -87,11 +106,13 @@ export class SeatAssignmentsController {
   @UseGuards(RolesGuard)
   @Roles('OWNER', 'ADMIN')
   reassignSeat(
-    @Req() req,
+    @Req() req: any,
+    @Org() organizationId: string,
     @Body() dto: ReassignSeatDto,
   ) {
     return this.seatService.reassignSeatByAdmin(
-      req.user.userId,
+      req.user.userId,      // admin actor
+      organizationId,
       dto.userId,
       dto.targetSeatId,
       dto.force ?? false,
