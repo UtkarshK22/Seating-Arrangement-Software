@@ -5,6 +5,8 @@ import { assignSeatToUser, unassignSeat } from "../api/seatAssignments";
 import Seat from "../components/Seat";
 import { UserList } from "../components/UserList";
 import api from "../api/http";
+import { hasPermission } from "../auth/permissions";
+import { useAuth } from "../auth/useAuth";
 
 type User = {
   id: string;
@@ -26,17 +28,18 @@ type SeatType = {
 
 export default function FloorMap() {
   const { floorId } = useParams<{ floorId: string }>();
+  const { user } = useAuth();
+
+  const canAssignOthers = hasPermission(user?.role, "SEAT_ASSIGN_OTHERS");
+  const canAssignSelf = hasPermission(user?.role, "SEAT_ASSIGN_SELF");
 
   const [seats, setSeats] = useState<SeatType[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-
   const [selectedUserId, setSelectedUserId] =
     useState<string | null>(null);
-
   const [users, setUsers] = useState<User[]>([]);
 
-  // Fetch floor map
   useEffect(() => {
     if (!floorId) return;
 
@@ -49,21 +52,28 @@ export default function FloorMap() {
       });
   }, [floorId]);
 
-  // Fetch users (admin)
   useEffect(() => {
+    if (!canAssignOthers) return;
+
     api<User[]>("/users").then((data) => {
       setUsers(data);
     });
-  }, []);
+  }, [canAssignOthers]);
 
   async function handleSeatClick(seat: SeatType) {
     if (!floorId) return;
     if (seat.isLocked) return;
     if (actionLoading) return;
 
-    if (!seat.isOccupied && !selectedUserId) {
-      alert("Select a user first");
-      return;
+    if (!seat.isOccupied) {
+      if (canAssignOthers && selectedUserId) {
+        // OK
+      } else if (canAssignSelf) {
+        // assign self
+      } else {
+        alert("You do not have permission to assign seats.");
+        return;
+      }
     }
 
     try {
@@ -71,8 +81,10 @@ export default function FloorMap() {
 
       if (seat.isOccupied) {
         await unassignSeat(seat.id);
-      } else {
-        await assignSeatToUser(seat.id, selectedUserId!);
+      } else if (canAssignOthers && selectedUserId) {
+        await assignSeatToUser(seat.id, selectedUserId);
+      } else if (canAssignSelf && user) {
+        await assignSeatToUser(seat.id, user.id);
       }
 
       const updated = await getFloorMap(floorId);
@@ -88,11 +100,13 @@ export default function FloorMap() {
 
   return (
     <div style={{ display: "flex", gap: 20 }}>
-      <UserList
-        users={users}
-        selectedUserId={selectedUserId}
-        onUserClick={setSelectedUserId}
-      />
+      {canAssignOthers && (
+        <UserList
+          users={users}
+          selectedUserId={selectedUserId}
+          onUserClick={setSelectedUserId}
+        />
+      )}
 
       <div>
         <div style={{ position: "relative", width: 800, height: 600 }}>

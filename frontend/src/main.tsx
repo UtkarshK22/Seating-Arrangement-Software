@@ -1,6 +1,10 @@
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AnalyticsPage } from "./pages/AnalyticsPage";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import App from "./App";
 import AuditPage from "./pages/AuditPage";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -11,13 +15,23 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "@fontsource/jetbrains-mono/400.css";
+import ProtectedAnalytics from "./components/ProtectedAnalytics";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
     <Routes>
       {/* LOGIN */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/analytics" element={<AnalyticsPage />} />
+
+      {/* ANALYTICS (AUTH + PERMISSION PROTECTED) */}
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <ProtectedAnalytics />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ROOT → just protect, no hardcoded floor */}
       <Route

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import api from "../api/http";
+import { hasPermission } from "../auth/permissions";
+import { useAuth } from "../auth/useAuth";
 
 /* ===================== TYPES ===================== */
 
@@ -47,6 +49,10 @@ export default function SeatDetailsPanel({
   const [confirmUnassign, setConfirmUnassign] = useState(false);
   const [users, setUsers] = useState<AssignedUser[]>([]);
   const [query, setQuery] = useState("");
+  const { user } = useAuth();
+  const canLock = hasPermission(user?.role, "SEAT_LOCK");
+  const canAssignOthers = hasPermission(user?.role, "SEAT_ASSIGN_OTHERS");
+  const canAssignSelf = hasPermission(user?.role, "SEAT_ASSIGN_SELF");
 
   /* ===================== LOAD OCCUPANT + USERS ===================== */
 
@@ -116,6 +122,35 @@ export default function SeatDetailsPanel({
       setActionLoading(false);
     }
   }
+
+    /* ===================== ASSIGN SELF ===================== */
+  async function handleAssignSelf() {
+  if (!user) return;
+
+  setActionLoading(true);
+
+  try {
+    const selfUser: AssignedUser = {
+      id: user.id,
+      fullName: "You",
+      email: "",
+    };
+
+    onOptimisticUpdate(seat.id, selfUser);
+
+    await api(`/seat-assignments/${seat.id}/assign/${user.id}`, {
+      method: "POST",
+    });
+
+    toast.success("Seat assigned to you");
+    setOccupant(selfUser);
+  } catch {
+    toast.error("Assignment failed");
+    onRefresh();
+  } finally {
+    setActionLoading(false);
+  }
+}
 
   /* ===================== LOCK / UNLOCK ===================== */
 
@@ -204,26 +239,28 @@ export default function SeatDetailsPanel({
         {/* ACTIONS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {/* LOCK */}
-          <button
-            onClick={handleToggleLock}
-            disabled={actionLoading}
-            style={{
-              padding: 10,
-              background: seat.isLocked ? "#16a34a" : "#111827",
-              color: "#fff",
-              borderRadius: 6,
-              opacity: actionLoading ? 0.6 : 1,
-            }}
-          >
-            {actionLoading
-              ? "Processing..."
-              : seat.isLocked
-              ? "Unlock Seat"
-              : "Lock Seat"}
-          </button>
-
+          {canLock && (
+            <button
+              onClick={handleToggleLock}
+              disabled={actionLoading}
+              style={{
+                padding: 10,
+                background: seat.isLocked ? "#16a34a" : "#111827",
+                color: "#fff",
+                borderRadius: 6,
+                opacity: actionLoading ? 0.6 : 1,
+              }}
+            >
+              {actionLoading
+                ? "Processing..."
+                : seat.isLocked
+                ? "Unlock Seat"
+                : "Lock Seat"}
+            </button>
+          )}
+          
           {/* UNASSIGN */}
-          {occupant && (
+          {occupant && canAssignOthers && (
             <button
               onClick={() => setConfirmUnassign(true)}
               disabled={actionLoading}
@@ -240,8 +277,26 @@ export default function SeatDetailsPanel({
           )}
         </div>
 
+        {/* ASSIGN SELF */}
+        {canAssignSelf && !occupant && !seat.isLocked && (
+            <button
+            onClick={handleAssignSelf}
+            disabled={actionLoading}
+            style={{
+                padding: 10,
+                background: "#2563eb",
+                color: "#fff",
+                borderRadius: 6,
+                opacity: actionLoading ? 0.6 : 1,
+          
+            }}
+          >
+              Assign to Me
+            </button>
+      )}
+
         {/* USER SEARCH + ASSIGN */}
-        {!seat.isLocked && (
+        {!seat.isLocked && canAssignOthers && (
           <>
             <hr />
 
