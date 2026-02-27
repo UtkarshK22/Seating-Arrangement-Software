@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "ExportLog" ALTER COLUMN "s3Key" DROP NOT NULL;
