@@ -1,0 +1,99 @@
+import {
+  Put,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
+import { FloorsService } from './floors.service';
+import { Org } from '../common/decorators/org.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { UpdateSeatPositionDto } from './dto/update-layout.dto';
+
+@Controller('floors')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class FloorsController {
+  constructor(
+    private readonly floorsService: FloorsService,
+  ) {}
+  @Put(':floorId/layout')
+  @Roles('OWNER', 'ADMIN')
+  async updateLayout(
+    @Org() organizationId: string,
+    @Param('floorId') floorId: string,
+    @Body() seats: UpdateSeatPositionDto[]
+  ) {
+    return this.floorsService.updateLayout(organizationId,floorId, seats);
+  }
+
+  // =========================
+  // GET ALL FLOORS (ORG SAFE)
+  // =========================
+  @Get()
+  @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
+  getFloors(
+    @Org() organizationId: string,
+  ) {
+    return this.floorsService.getFloors(
+      organizationId,
+    );
+  }
+
+  // =========================
+  // CREATE FLOOR (OWNER / ADMIN)
+  // =========================
+  @Post()
+  @Roles('OWNER', 'ADMIN')
+  createFloor(
+    @Org() organizationId: string,
+    @Body('buildingId') buildingId: string,
+    @Body('name') name: string,
+    @Body('imageUrl') imageUrl: string,
+    @Body('width') width: number,
+    @Body('height') height: number,
+  ) {
+    return this.floorsService.createFloor(
+      organizationId,
+      buildingId,
+      name,
+      imageUrl,
+      width,
+      height,
+    );
+  }
+
+  // =========================
+  // GET SEATS OF A FLOOR
+  // =========================
+  @Get(':floorId/seats')
+  @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
+  getSeats(
+    @Org() organizationId: string,
+    @Param('floorId') floorId: string,
+  ) {
+    return this.floorsService.getSeats(
+      organizationId,
+      floorId,
+    );
+  }
+
+  // =========================
+  // GET UI-READY FLOOR MAP
+  // =========================
+  @Get(':floorId/map')
+  @Roles('OWNER', 'ADMIN', 'EMPLOYEE')
+  getFloorMap(
+    @Org() organizationId: string,
+    @Param('floorId') floorId: string,
+  ) {
+    return this.floorsService.getFloorMap(
+      organizationId,
+      floorId,
+    );
+  }
+}
