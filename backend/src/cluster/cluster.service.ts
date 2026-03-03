@@ -15,12 +15,14 @@ export class ClusterService {
     floorId: string,
     organizationId: string,
   ) {
+    // 1️⃣ Resolve active project
     const project =
       await this.projectResolution.resolveActiveProject(
         userId,
         organizationId,
       );
 
+    // 2️⃣ Fetch all seats on floor
     const seats = await tx.seat.findMany({
       where: { floorId },
       include: {
@@ -30,23 +32,55 @@ export class ClusterService {
       },
     });
 
-    const availableSeats = seats.filter(
+    // 3️⃣ Determine available seats
+    let availableSeats = seats.filter(
       s => s.assignments.length === 0 && !s.isLocked,
     );
 
     if (!availableSeats.length) return null;
 
+    // 4️⃣ No project → fallback
     if (!project) {
       return availableSeats[0];
     }
 
-    const projectSeats = seats.filter(s =>
-      s.assignments.some(a =>
-        a.userId === userId
-      ),
-    );
+    // 5️⃣ Fetch project zone (if exists)
+    const zone = await tx.projectZone.findUnique({
+      where: { projectId: project.id },
+    });
 
-    const centroid = calculateCentroid(projectSeats);
+    // 6️⃣ Enforce hard boundary if enabled
+    if (zone && zone.isHardBoundary) {
+      availableSeats = availableSeats.filter(seat =>
+        seat.posX >= zone.minX &&
+        seat.posX <= zone.maxX &&
+        seat.posY >= zone.minY &&
+        seat.posY <= zone.maxY,
+      );
+
+      if (!availableSeats.length) return null;
+    }
+
+    // 7️⃣ Get all active project seat assignments
+    const projectAssignments = await tx.seatAssignment.findMany({
+      where: {
+        isActive: true,
+        user: {
+          projectMemberships: {
+            some: { projectId: project.id },
+          },
+        },
+        seat: { floorId },
+      },
+      include: {
+        seat: true,
+      },
+    });
+
+    // 8️⃣ Compute centroid from ALL project seats
+    const centroid = calculateCentroid(
+      projectAssignments.map(a => a.seat),
+    );
 
     let bestSeat;
 
@@ -58,9 +92,11 @@ export class ClusterService {
         }))
         .sort((a, b) => a.dist - b.dist)[0]?.seat;
     } else {
+      // First project member case
       bestSeat = availableSeats[0];
     }
 
+    // 9️⃣ Update project activity
     await tx.projectMember.update({
       where: {
         projectId_userId: {

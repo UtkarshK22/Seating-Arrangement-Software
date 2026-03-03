@@ -25,6 +25,7 @@ model Organization {
   // ✅ Added for Project system
   projects        Project[]
   projectMembers  ProjectMember[]
+  projectZones    ProjectZone[]
 }
 
 model User {
@@ -90,6 +91,7 @@ model Floor {
   building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   seats      Seat[]
   maps       FloorMap[]
+  projectZones ProjectZone[]
 
   @@unique([name, buildingId])
   @@index([buildingId])
@@ -169,6 +171,7 @@ model Project {
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members         ProjectMember[]
+  zone            ProjectZone?
 
   @@index([organizationId])
   @@index([organizationId, isActive])
@@ -226,6 +229,29 @@ model ExportLog {
 
   @@index([organizationId, exportType])
   @@index([organizationId, exportedAt])
+}
+
+model ProjectZone {
+  id              String   @id @default(uuid())
+  projectId       String   @unique
+  floorId         String
+  organizationId  String
+
+  minX            Float
+  minY            Float
+  maxX            Float
+  maxY            Float
+
+  isHardBoundary  Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  floor           Floor         @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, floorId])
 }
 
 enum OrgRole {
