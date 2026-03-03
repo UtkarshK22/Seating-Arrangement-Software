@@ -6,7 +6,10 @@ const prisma = new PrismaClient()
 async function main() {
   const passwordHash = await bcrypt.hash('password123', 10)
 
-  // 1️⃣ Create Organization
+  // =====================================================
+  // 1️⃣ CREATE ORGANIZATION
+  // =====================================================
+
   const organization = await prisma.organization.upsert({
     where: { slug: 'demo-org' },
     update: {},
@@ -16,7 +19,10 @@ async function main() {
     },
   })
 
-  // 2️⃣ Create Admin User
+  // =====================================================
+  // 2️⃣ CREATE USERS
+  // =====================================================
+
   const admin = await prisma.user.upsert({
     where: { email: 'admin@demo.com' },
     update: {},
@@ -27,7 +33,6 @@ async function main() {
     },
   })
 
-  // 3️⃣ Create Normal User
   const user = await prisma.user.upsert({
     where: { email: 'user@demo.com' },
     update: {},
@@ -38,7 +43,10 @@ async function main() {
     },
   })
 
-  // 4️⃣ Attach Roles via OrganizationMember
+  // =====================================================
+  // 3️⃣ ATTACH ROLES
+  // =====================================================
+
   await prisma.organizationMember.upsert({
     where: {
       userId_organizationId: {
@@ -70,11 +78,11 @@ async function main() {
   })
 
   // =====================================================
-  // 5️⃣ CREATE BUILDING (REQUIRED FOR FLOOR ACCESS)
+  // 4️⃣ CREATE BUILDING
   // =====================================================
 
   const building = await prisma.building.upsert({
-    where: { id: 'demo-building-id' }, // fixed id for repeatable seed
+    where: { id: 'demo-building-id' },
     update: {},
     create: {
       id: 'demo-building-id',
@@ -84,8 +92,11 @@ async function main() {
   })
 
   // =====================================================
-  // 6️⃣ CREATE FLOOR
+  // 5️⃣ CREATE FLOOR
   // =====================================================
+
+  const floorWidth = 1000
+  const floorHeight = 600
 
   const floor = await prisma.floor.upsert({
     where: { id: 'demo-floor-id' },
@@ -95,16 +106,15 @@ async function main() {
       name: 'First Floor',
       buildingId: building.id,
       imageUrl: 'https://via.placeholder.com/1000x600',
-      width: 1000,
-      height: 600,
+      width: floorWidth,
+      height: floorHeight,
     },
   })
 
   // =====================================================
-  // 7️⃣ CREATE SEATS
+  // 6️⃣ CREATE SEATS (SPATIAL CORE)
   // =====================================================
 
-  // Delete existing seats for this floor (so seed is repeatable)
   await prisma.seat.deleteMany({
     where: {
       floorId: floor.id,
@@ -112,15 +122,23 @@ async function main() {
   })
 
   const seatCount = 15
+  const defaultSeatWidth = 40
+  const defaultSeatHeight = 40
 
   for (let i = 1; i <= seatCount; i++) {
     await prisma.seat.create({
       data: {
         seatCode: `S-${i}`,
-        x: Math.random(),
-        y: Math.random(),
         floorId: floor.id,
         isLocked: false,
+
+        // === Spatial Fields ===
+        posX: Math.random() * (floorWidth - defaultSeatWidth),
+        posY: Math.random() * (floorHeight - defaultSeatHeight),
+        rotation: 0,
+        scale: 1,
+        width: defaultSeatWidth,
+        height: defaultSeatHeight,
       },
     })
   }

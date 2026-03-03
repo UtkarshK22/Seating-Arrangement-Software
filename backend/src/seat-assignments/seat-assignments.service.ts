@@ -8,12 +8,14 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { SeatAuditService } from "../seat-audit/seat-audit.service";
 import { SeatAuditAction } from "@prisma/client";
+import { ClusterService } from '../cluster/cluster.service';
 
 @Injectable()
 export class SeatAssignmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly seatAudit: SeatAuditService,
+    private readonly clusterService: ClusterService,
   ) {}
 
   /* =========================================================
@@ -227,107 +229,108 @@ export class SeatAssignmentsService {
   }
 
   /* =========================================================
-     AUTO ASSIGN (ORG SAFE)
-  ========================================================= */
+   AUTO ASSIGN (ORG SAFE + CLUSTER INTELLIGENCE)
+========================================================= */
 
-  async autoAssignSmart(
+async autoAssignSmart(
     actorUserId: string,
     organizationId: string,
     dto: {
-      seatIds: string[];
-      userIds: string[];
-      strict?: boolean;
-    },
-  ) {
-    const { seatIds, userIds, strict = false } = dto;
-
-    return this.prisma.$transaction(async (tx) => {
-
-      const seats = await tx.seat.findMany({
-        where: {
-          id: { in: seatIds },
-          isLocked: false,
-          floor: {
-            building: { organizationId },
-          },
-          assignments: {
-            none: { isActive: true },
-          },
-        },
-        select: {
-          id: true,
-          x: true,
-          y: true,
-          seatCode: true,
-        },
-      });
-
-      if (!seats.length) {
-        if (strict) {
-          throw new BadRequestException("No available seats");
-        }
-        return { assigned: [], skippedUsers: userIds };
-      }
-
-      const eligibleUsers = await tx.user.findMany({
-        where: {
-          id: { in: userIds },
-          // 🔐 Must belong to organization
-          memberships: {
-            some: {
-              organizationId,
-              isActive: true,
-            },
-          },
-          // 🔐 Must not already have active seat
-          seatAssignments: {
-            none: {
-              isActive: true,
-            },
-          },
-        },
-        select: { id: true },
-      });
-
-      const validUserIds = eligibleUsers.map(u => u.id);
-
-      if (strict && validUserIds.length !== userIds.length) {
-        throw new ConflictException(
-          "Some users already have active seats or invalid"
-        );
-      }
-
-      const assignCount = Math.min(validUserIds.length, seats.length);
-      const assignments = [];
-
-      for (let i = 0; i < assignCount; i++) {
-        const created = await tx.seatAssignment.create({
-          data: {
-            userId: validUserIds[i],
-            seatId: seats[i].id,
-            isActive: true,
-            assignedAt: new Date(),
-          },
-        });
-
-        await this.seatAudit.log({
-          seatId: seats[i].id,
-          seatCode: seats[i].seatCode,
-          userId: validUserIds[i],
-          actorId: actorUserId,
-          action: SeatAuditAction.ASSIGN,
-        });
-
-        assignments.push(created);
-      }
-
-      return {
-        assigned: assignments,
-        skippedUsers: userIds.filter(
-          id => !validUserIds.includes(id)
-        ),
-      };
-    });
+      seatIds: string[];   // KEEPING this
+     userIds: string[];
+     strict?: boolean;
+   },
+ ) {
+   const { seatIds, userIds, strict = false } = dto;
+   return this.prisma.$transaction(async (tx) => {
+     // 🔐 Fetch available seats from provided seatIds
+     const seats = await tx.seat.findMany({
+       where: {
+         id: { in: seatIds },
+         isLocked: false,
+         floor: {
+           building: { organizationId },
+         },
+         assignments: {
+           none: { isActive: true },
+         },
+       },
+       select: {
+         id: true,
+         posX: true,
+         posY: true,
+         seatCode: true,
+         floorId: true,
+       },
+     });
+     if (!seats.length) {
+       if (strict) {
+         throw new BadRequestException("No available seats");
+       }
+       return { assigned: [], skippedUsers: userIds };
+     }
+     // 🔐 Validate eligible users
+     const eligibleUsers = await tx.user.findMany({
+       where: {
+         id: { in: userIds },
+         memberships: {
+           some: {
+             organizationId,
+             isActive: true,
+           },
+         },
+         seatAssignments: {
+           none: { isActive: true },
+         },
+       },
+       select: { id: true },
+     });
+     const validUserIds = eligibleUsers.map(u => u.id);
+     if (strict && validUserIds.length !== userIds.length) {
+       throw new ConflictException(
+         "Some users already have active seats or invalid",
+       );
+     }
+     const assignments = [];
+     const skippedUsers: string[] = [];
+     // 🔥 Use cluster engine to determine best seat per user
+     for (const userId of validUserIds) {
+       try {
+         const bestSeat =
+           await this.clusterService.autoAssignSeat(
+             userId,
+             seats[0].floorId,   // derive floor from provided
+             organizationId,
+           );
+         if (!bestSeat) {
+           skippedUsers.push(userId);
+           continue;
+         }
+         const created = await tx.seatAssignment.create({
+           data: {
+             userId,
+             seatId: bestSeat.id,
+             isActive: true,
+             assignedAt: new Date(),
+           },
+         });
+         await this.seatAudit.log({
+           seatId: bestSeat.id,
+           seatCode: bestSeat.seatCode,
+           userId,
+           actorId: actorUserId,
+           action: SeatAuditAction.ASSIGN,
+         });
+         assignments.push(created);
+       } catch (e) {
+         skippedUsers.push(userId);
+       }
+     }
+     return {
+       assigned: assignments,
+       skippedUsers,
+     };
+   });
   }
 
   /* =========================================================

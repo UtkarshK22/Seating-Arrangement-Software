@@ -3,7 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-
+import { ProjectsModule } from './projects/projects.module';
+import { ClusterModule } from './cluster/cluster.module';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
@@ -63,6 +64,8 @@ import { AppController } from './app.controller';
     SeatAuditModule,
     ExportLogsModule,
     AnalyticsModule,
+    ProjectsModule,
+    ClusterModule,
   ],
   providers: [
     // 🔐 1️⃣ Global rate limit

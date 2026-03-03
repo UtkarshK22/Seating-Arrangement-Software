@@ -16,9 +16,15 @@ model Organization {
   trialEndsAt DateTime?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
-  buildings   Building[]
-  exportLogs  ExportLog[]
-  members     OrganizationMember[]
+
+  buildings       Building[]
+  exportLogs      ExportLog[]
+  members         OrganizationMember[]
+  floorMaps       FloorMap[]
+
+  // ✅ Added for Project system
+  projects        Project[]
+  projectMembers  ProjectMember[]
 }
 
 model User {
@@ -29,11 +35,15 @@ model User {
   isActive         Boolean              @default(true)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
+
   exportLogs       ExportLog[]          @relation("UserExports")
   memberships      OrganizationMember[]
   seatAssignments  SeatAssignment[]
   seatAuditActions SeatAuditLog[]       @relation("SeatAuditActor")
   auditLogs        SeatAuditLog[]       @relation("AuditUser")
+
+  // ✅ Added for Project system
+  projectMemberships ProjectMember[]
 }
 
 model OrganizationMember {
@@ -44,10 +54,12 @@ model OrganizationMember {
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
+  @@index([organizationId])
 }
 
 model Building {
@@ -56,8 +68,11 @@ model Building {
   organizationId String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   floors         Floor[]
+
+  @@index([organizationId])
 }
 
 model Floor {
@@ -66,29 +81,63 @@ model Floor {
   buildingId String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // Legacy layout
   height     Int
-  imageUrl   String
   width      Int
+  imageUrl   String
+
   building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   seats      Seat[]
+  maps       FloorMap[]
 
   @@unique([name, buildingId])
+  @@index([buildingId])
 }
 
 model Seat {
   id          String           @id @default(uuid())
   seatCode    String
-  x           Float
-  y           Float
-  isLocked    Boolean          @default(false)
   floorId     String
+  isLocked    Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+
+  // Spatial Engine
+  posX        Float            @default(0)
+  posY        Float            @default(0)
+  rotation    Float            @default(0)
+  scale       Float            @default(1)
+  width       Float            @default(40)
+  height      Float            @default(40)
+
   floor       Floor            @relation(fields: [floorId], references: [id], onDelete: Cascade)
   assignments SeatAssignment[]
   auditLogs   SeatAuditLog[]
 
   @@unique([seatCode, floorId])
+  @@index([floorId])
+}
+
+model FloorMap {
+  id              String       @id @default(uuid())
+  floorId         String
+  organizationId  String
+
+  version         Int
+  fileUrl         String
+  fileType        MapFileType
+
+  isActive        Boolean      @default(false)
+  isDraft         Boolean      @default(true)
+
+  createdAt       DateTime     @default(now())
+
+  floor           Floor        @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([floorId, version])
+  @@index([organizationId, floorId])
 }
 
 model SeatAssignment {
@@ -102,10 +151,44 @@ model SeatAssignment {
   seat         Seat      @relation(fields: [seatId], references: [id], onDelete: Cascade)
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // 🔐 Performance + integrity
   @@index([userId, isActive])
   @@index([seatId, isActive])
   @@index([assignedAt])
+}
+
+model Project {
+  id              String   @id @default(uuid())
+  name            String
+  organizationId  String
+  startDate       DateTime
+  endDate         DateTime?
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members         ProjectMember[]
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model ProjectMember {
+  projectId       String
+  userId          String
+  organizationId  String
+
+  joinedAt        DateTime @default(now())
+  lastActiveAt    DateTime @default(now())
+
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId, lastActiveAt])
+  @@index([organizationId])
 }
 
 model SeatAuditLog {
@@ -125,7 +208,6 @@ model SeatAuditLog {
   seat           Seat            @relation(fields: [seatId], references: [id], onDelete: Cascade)
   user           User?           @relation("AuditUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  // 🔐 Analytics acceleration
   @@index([seatId, createdAt])
   @@index([actorId, createdAt])
   @@index([createdAt])
@@ -138,6 +220,7 @@ model ExportLog {
   exportedAt     DateTime     @default(now())
   exportedById   String
   s3Key          String?
+
   exportedBy     User         @relation("UserExports", fields: [exportedById], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id])
 
@@ -165,4 +248,10 @@ enum SeatAuditAction {
 enum ExportType {
   SEAT_ALLOCATION
   SEAT_AUDIT
+}
+
+enum MapFileType {
+  IMAGE
+  PDF
+  CAD
 }
