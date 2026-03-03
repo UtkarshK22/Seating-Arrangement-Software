@@ -298,9 +298,10 @@ async autoAssignSmart(
        try {
          const bestSeat =
            await this.clusterService.autoAssignSeat(
-             userId,
-             seats[0].floorId,   // derive floor from provided
-             organizationId,
+            tx,
+            userId,
+            seats[0].floorId,   // derive floor from provided
+            organizationId,
            );
          if (!bestSeat) {
            skippedUsers.push(userId);

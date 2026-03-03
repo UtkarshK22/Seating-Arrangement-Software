@@ -1,54 +1,48 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { ProjectResolutionService } from '../projects/project-resolution.service';
 import { calculateCentroid, distance } from './distance.util';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ClusterService {
   constructor(
-    private prisma: PrismaService,
-    private projectResolution: ProjectResolutionService,
+    private readonly projectResolution: ProjectResolutionService,
   ) {}
 
-  async autoAssignSeat(userId: string, floorId: string, organizationId: string) {
-    const project = await this.projectResolution.resolveActiveProject(
-      userId,
-      organizationId,
-    );
+  async autoAssignSeat(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    floorId: string,
+    organizationId: string,
+  ) {
+    const project =
+      await this.projectResolution.resolveActiveProject(
+        userId,
+        organizationId,
+      );
 
-    const seats = await this.prisma.seat.findMany({
+    const seats = await tx.seat.findMany({
       where: { floorId },
       include: {
         assignments: {
           where: { isActive: true },
-          include: {
-            user: {
-              include: {
-                projectMemberships: true,
-
-            },
-          },
         },
       },
-    },
-  });
+    });
 
     const availableSeats = seats.filter(
       s => s.assignments.length === 0 && !s.isLocked,
     );
 
-    if (!availableSeats.length) {
-      throw new Error('No available seats');
-    }
+    if (!availableSeats.length) return null;
 
     if (!project) {
-      return availableSeats[0]; // fallback
+      return availableSeats[0];
     }
 
     const projectSeats = seats.filter(s =>
       s.assignments.some(a =>
-        a.user.projectMemberships?.some(pm => pm.projectId === project.id),
+        a.userId === userId
       ),
     );
 
@@ -67,18 +61,16 @@ export class ClusterService {
       bestSeat = availableSeats[0];
     }
 
-    if (project) {
-      await this.prisma.projectMember.update({
-        where: {
-          projectId_userId: {
-            projectId: project.id,
-            userId,
-
+    await tx.projectMember.update({
+      where: {
+        projectId_userId: {
+          projectId: project.id,
+          userId,
         },
       },
-        data: { lastActiveAt: new Date() },
-      });
-    }
+      data: { lastActiveAt: new Date() },
+    });
+
     return bestSeat;
   }
 }
